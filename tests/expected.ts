@@ -1,5 +1,5 @@
 /** The stores seeded by supabase/seed.sql. */
-export const SEEDED_STORES = ["Albert Heijn", "Hoogvliet", "Kruidvat"];
+export const SEEDED_STORES = ["Albert Heijn", "Hoogvliet", "Kruidvat", "Action"];
 
 /**
  * True when the app under test has Supabase keys. CI on a public repo runs
