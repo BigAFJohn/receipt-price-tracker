@@ -125,3 +125,29 @@
   color: var(--accent);
   font-size: 13px;
 }
+
+.statusRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 13px;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.okText {
+  color: var(--accent);
+}
+
+.warnText {
+  color: var(--warn);
+}
+
+.mutedText {
+  color: var(--muted);
+}

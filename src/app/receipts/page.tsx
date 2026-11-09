@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { signOut } from "../login/actions";
 import { DeleteButton } from "./delete-button";
+import { ReadButton } from "./read-button";
 import styles from "./receipts.module.css";
 import { UploadForm } from "./upload-form";
 
@@ -16,6 +17,72 @@ const uploadedAt = new Intl.DateTimeFormat("en-GB", {
   timeStyle: "short",
   timeZone: "Europe/Amsterdam",
 });
+
+const purchasedOn = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "Europe/Amsterdam",
+});
+
+const euro = new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" });
+
+type ListedReceipt = {
+  created_at: string;
+  purchased_at: string | null;
+  total: number | null;
+  store_branch: string | null;
+  extracted_at: string | null;
+  extraction: { totals_match?: boolean; store?: string } | null;
+  extraction_error: string | null;
+  // A single store; typed loosely because supabase-js can't tell without generated types.
+  stores: { name: string } | { name: string }[] | null;
+  receipt_lines: { count: number }[];
+};
+
+const storeName = (s: ListedReceipt["stores"]) => (Array.isArray(s) ? s[0]?.name : s?.name);
+
+/** "Albert Heijn · 8 Nov, 17:17 · € 15,20 · 5 items", or the upload time before reading. */
+function ReceiptSummary({ receipt: r }: { receipt: ListedReceipt }) {
+  if (!r.extracted_at || r.total === null || !r.purchased_at) {
+    return <span>Uploaded {uploadedAt.format(new Date(r.created_at))}</span>;
+  }
+  const store = storeName(r.stores) ?? r.extraction?.store ?? "Unknown store";
+  const items = r.receipt_lines[0]?.count ?? 0;
+  return (
+    <span data-testid="receipt-summary">
+      <strong>{store}</strong> · {purchasedOn.format(new Date(r.purchased_at))} · {euro.format(r.total)} ·{" "}
+      {items} {items === 1 ? "item" : "items"}
+    </span>
+  );
+}
+
+function ExtractionStatus({ receipt: r }: { receipt: ListedReceipt }) {
+  if (r.extraction_error) {
+    return (
+      <span className={styles.warnText} data-testid="extraction-status">
+        {r.extraction_error}
+      </span>
+    );
+  }
+  if (!r.extracted_at) {
+    return (
+      <span className={styles.mutedText} data-testid="extraction-status">
+        Not read yet
+      </span>
+    );
+  }
+  return r.extraction?.totals_match ? (
+    <span className={styles.okText} data-testid="extraction-status">
+      Lines add up to the total
+    </span>
+  ) : (
+    <span className={styles.warnText} data-testid="extraction-status">
+      Lines don&apos;t add up — check when reviewing
+    </span>
+  );
+}
 
 export default function ReceiptsPage() {
   return (
@@ -38,7 +105,9 @@ async function SignedInContent() {
 
   const { data: receipts, error } = await supabase
     .from("receipts")
-    .select("id, image_path, status, created_at")
+    .select(
+      "id, image_path, status, created_at, purchased_at, total, store_branch, extracted_at, extraction, extraction_error, stores(name), receipt_lines(count)",
+    )
     .order("created_at", { ascending: false });
 
   if (error) console.error("[receipts] list failed:", error.code, error.message);
@@ -82,12 +151,22 @@ async function SignedInContent() {
                   <span className={styles.thumb} aria-hidden />
                 )}
                 <div className={styles.meta}>
-                  <span>Uploaded {uploadedAt.format(new Date(r.created_at))}</span>
-                  <span className={r.status === "draft" ? styles.draft : styles.confirmed}>
-                    {r.status === "draft" ? "Draft" : "Confirmed"}
+                  <ReceiptSummary receipt={r} />
+                  <span className={styles.statusRow}>
+                    <span className={r.status === "draft" ? styles.draft : styles.confirmed}>
+                      {r.status === "draft" ? "Draft" : "Confirmed"}
+                    </span>
+                    <ExtractionStatus receipt={r} />
                   </span>
                 </div>
-                {r.status === "draft" && <DeleteButton receiptId={r.id} />}
+                {r.status === "draft" && (
+                  <div className={styles.actions}>
+                    {(!r.extracted_at || r.extraction_error) && (
+                      <ReadButton receiptId={r.id} label={r.extraction_error ? "Try again" : "Read receipt"} />
+                    )}
+                    <DeleteButton receiptId={r.id} />
+                  </div>
+                )}
               </li>
             );
           })}

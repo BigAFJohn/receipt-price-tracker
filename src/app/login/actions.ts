@@ -29,8 +29,10 @@ export async function signIn(_prev: SignInState, formData: FormData): Promise<Si
   redirect(next);
 }
 
-export async function signOut() {
-  const supabase = await createSupabaseServerClient();
-  await supabase?.auth.signOut();
-  redirect("/login");
-}
+ export async function signOut() {
+   const supabase = await createSupabaseServerClient();
+    // "local" ends this browser's session only. Supabase's default ("global")
+    // would also sign you out on every other device.
+   await supabase?.auth.signOut({ scope: "local" });
+   redirect("/login");
+ }
