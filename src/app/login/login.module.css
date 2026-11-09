@@ -1,0 +1,62 @@
+.main {
+  max-width: 360px;
+  margin: 0 auto;
+  padding: 64px 16px;
+}
+
+.title {
+  margin: 0 0 4px;
+  font-size: 28px;
+}
+
+.lead {
+  margin: 0 0 24px;
+  color: var(--muted);
+}
+
+.form {
+  display: grid;
+  gap: 16px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.field input {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.field input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.error {
+  margin: 0;
+  color: var(--warn);
+  font-size: 14px;
+}
+
+.button {
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--bg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

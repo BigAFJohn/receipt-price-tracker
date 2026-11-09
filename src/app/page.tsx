@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import styles from "./page.module.css";
@@ -9,7 +10,9 @@ export default function Home() {
       <p className={styles.lead}>
         Snap a receipt, see what you paid, and track prices over time.
       </p>
-
+      <p className={styles.cta}>
+        <Link href="/receipts">Go to your receipts →</Link>
+      </p>
       <section className={styles.card} aria-labelledby="db-status-heading">
         <h2 id="db-status-heading">Database connection</h2>
         {/* Reads the request, so it streams in behind a Suspense boundary. */}
