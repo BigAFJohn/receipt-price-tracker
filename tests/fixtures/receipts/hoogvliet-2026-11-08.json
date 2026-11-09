@@ -1,0 +1,9 @@
+{
+  "store": "Hoogvliet",
+  "purchased_at": "2026-11-08T14:18:00+01:00",
+  "total": 2.87,
+  "lines": [
+    { "raw_text": "HOOGVLIET CROISSANT", "quantity": 2, "is_weighed": false, "unit_price": 0.48, "line_total": 0.96, "discount": 0, "is_deposit": false },
+    { "raw_text": "APPELSIENTJE MULTI", "quantity": 1, "is_weighed": false, "unit_price": 1.91, "line_total": 1.91, "discount": 0, "is_deposit": false }
+  ]
+}
