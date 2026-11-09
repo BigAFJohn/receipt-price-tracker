@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { fitWithin, receiptImagePath, validateReceiptFile } from "@/lib/receipt-image";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { createDraftReceipt } from "./actions";
+import { createDraftReceipt, extractReceipt } from "./actions";
 import styles from "./receipts.module.css";
 
 /**
@@ -55,8 +55,19 @@ export function UploadForm({ userId }: { userId: string }) {
       }
 
       setStatus({ kind: "busy", message: "Saving…" });
-      const result = await createDraftReceipt(path);
-      setStatus(result.error ? { kind: "error", message: result.error } : { kind: "idle" });
+      const draft = await createDraftReceipt(path);
+      if (draft.error || !draft.receiptId) {
+        setStatus({ kind: "error", message: draft.error ?? "The receipt could not be saved." });
+        return;
+      }
+
+      setStatus({ kind: "busy", message: "Reading receipt…" });
+      const read = await extractReceipt(draft.receiptId);
+      setStatus(
+        read.error
+          ? { kind: "error", message: `Saved as a draft, but it couldn't be read: ${read.error}` }
+          : { kind: "idle" },
+      );
     } catch (err) {
       console.error("[upload]", err);
       setStatus({ kind: "error", message: "That photo could not be read. Try another one." });

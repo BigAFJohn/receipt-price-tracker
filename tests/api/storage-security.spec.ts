@@ -62,6 +62,6 @@ test.describe("Storage and data rules", () => {
     if (!error) await supabase.storage.from("receipts").remove([path]);
     
      expect(error).not.toBeNull();
-     await supabase.auth.signOut();
+     await supabase.auth.signOut({ scope: "local" });
    });
 });

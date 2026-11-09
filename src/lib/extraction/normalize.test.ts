@@ -1,0 +1,84 @@
+import { describe, expect, it } from "vitest";
+import { amsterdamToIso, normalizeExtraction } from "./normalize";
+import type { ExtractedReceipt } from "./schema";
+
+describe("amsterdamToIso", () => {
+  it("uses +01:00 in winter", () => {
+    expect(amsterdamToIso("2026-11-08", "17:17")).toBe("2026-11-08T17:17:00+01:00");
+  });
+
+  it("uses +02:00 in summer", () => {
+    expect(amsterdamToIso("2026-07-01", "09:05")).toBe("2026-07-01T09:05:00+02:00");
+  });
+
+  it("switches on the right side of the clock change (25 Oct 2026, 03:00 → 02:00)", () => {
+    expect(amsterdamToIso("2026-10-24", "12:00")).toBe("2026-10-24T12:00:00+02:00");
+    expect(amsterdamToIso("2026-10-26", "12:00")).toBe("2026-10-26T12:00:00+01:00");
+  });
+
+  it("uses midday when no time is printed", () => {
+    expect(amsterdamToIso("2026-11-08", null)).toBe("2026-11-08T12:00:00+01:00");
+  });
+});
+
+const raw: ExtractedReceipt = {
+  is_receipt: true,
+  store: "Albert Heijn",
+  store_branch: "  Lunetten, Utrecht ",
+  purchase_date: "2026-11-08",
+  purchase_time: "17:17",
+  total: 4.39,
+  lines: [
+    {
+      raw_text: "BLAUWE  BES",
+      sku: "",
+      quantity: 1,
+      is_weighed: false,
+      unit_price: 4.49,
+      line_total: 4.49,
+      discount: -0.5,
+      is_deposit: false,
+      confidence: 1.2,
+    },
+    {
+      raw_text: "STATIEGELD",
+      sku: null,
+      quantity: 2,
+      is_weighed: false,
+      unit_price: 0.2,
+      line_total: 0.4,
+      discount: 0,
+      is_deposit: true,
+      confidence: 0.9,
+    },
+  ],
+};
+
+describe("normalizeExtraction", () => {
+  const result = normalizeExtraction(raw);
+
+  it("makes discounts positive", () => {
+    expect(result.lines[0].discount).toBe(0.5);
+  });
+
+  it("tidies text and empty article numbers", () => {
+    expect(result.lines[0].raw_text).toBe("BLAUWE BES");
+    expect(result.lines[0].sku).toBeNull();
+    expect(result.store_branch).toBe("Lunetten, Utrecht");
+  });
+
+  it("numbers the lines from 1 and keeps confidence between 0 and 1", () => {
+    expect(result.lines.map((l) => l.line_no)).toEqual([1, 2]);
+    expect(result.lines[0].confidence).toBe(1);
+  });
+
+  it("adds the Amsterdam time zone to the date", () => {
+    expect(result.purchased_at).toBe("2026-11-08T17:17:00+01:00");
+  });
+
+  it("checks the lines against the total", () => {
+    // 4.49 − 0.50 + 0.40 deposit = 4.39
+    expect(result.totals_match).toBe(true);
+    expect(normalizeExtraction({ ...raw, total: 9.99 }).totals_match).toBe(false);
+  });
+});
