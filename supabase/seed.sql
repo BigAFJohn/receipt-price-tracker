@@ -4,7 +4,8 @@
 insert into public.stores (name) values
   ('Albert Heijn'),
   ('Hoogvliet'),
-  ('Kruidvat')
+  ('Kruidvat'),
+  ('Action')
 on conflict (name) do nothing;
 
 insert into public.categories (name) values

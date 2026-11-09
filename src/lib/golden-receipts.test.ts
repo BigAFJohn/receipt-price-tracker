@@ -12,6 +12,7 @@ import { linesMatchTotal, type PricedLine } from "./pricing";
 type FixtureLine = {
   raw_text: string;
   quantity: number;
+  sku?: string; 
   is_weighed: boolean;
   unit_price: number;
   line_total: number;

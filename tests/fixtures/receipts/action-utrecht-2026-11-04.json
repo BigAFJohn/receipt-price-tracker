@@ -1,0 +1,10 @@
+{
+  "store": "Action",
+  "purchased_at": "2026-11-04T16:59:54+01:00",
+  "total": 14.62,
+  "lines": [
+    { "raw_text": "schuimspaan rvs 12cm", "sku": "2547713", "quantity": 1, "is_weighed": false, "unit_price": 0.99, "line_total": 0.99, "discount": 0, "is_deposit": false },
+    { "raw_text": "gastendoek capetown beige 30x50cm", "sku": "137000", "quantity": 1, "is_weighed": false, "unit_price": 0.64, "line_total": 0.64, "discount": 0, "is_deposit": false },
+    { "raw_text": "easy dekbed 140x200cm flannel fleece", "sku": "3224852", "quantity": 1, "is_weighed": false, "unit_price": 12.99, "line_total": 12.99, "discount": 0, "is_deposit": false }
+  ]
+}
