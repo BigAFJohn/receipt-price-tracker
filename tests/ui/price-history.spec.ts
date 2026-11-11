@@ -1,7 +1,8 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { expect, test } from "@playwright/test";
 import { testUser } from "../expected";
 import { signIn } from "../helpers/auth";
+import { confirmReceipt, euro, signedInClient } from "../helpers/receipts";
 
 /**
  * Seeds confirmed receipts straight into Supabase (no Claude needed), then
@@ -9,44 +10,12 @@ import { signIn } from "../helpers/auth";
  * deleted again afterwards.
  */
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-/** Intl puts a non-breaking space between € and the amount. */
-const euro = (text: string) => text.replace(/ /g, " ");
-
-type Purchase = { store: string; at: string; quantity: number; unitPrice: number; discount?: number };
-
-async function confirmReceipt(supabase: SupabaseClient, productId: string, p: Purchase) {
-  const { data: store } = await supabase.from("stores").select("id").eq("name", p.store).single();
-  const { data: receipt } = await supabase.from("receipts").insert({ status: "draft" }).select("id").single();
-  const lineTotal = Math.round(p.quantity * p.unitPrice * 100) / 100;
-  const discount = p.discount ?? 0;
-  const { error } = await supabase.rpc("save_receipt", {
-    p_receipt_id: receipt!.id,
-    p_store_id: store!.id,
-    p_purchased_at: p.at,
-    p_total: Math.round((lineTotal - discount) * 100) / 100,
-    p_lines: [
-      {
-        line_no: 1,
-        raw_text: "TEST COLA ZERO 1,5L",
-        sku: null,
-        quantity: p.quantity,
-        is_weighed: false,
-        unit_price: p.unitPrice,
-        line_total: lineTotal,
-        discount,
-        is_deposit: false,
-        confidence: null,
-        product_id: productId,
-      },
-    ],
-    p_confirm: true,
-  });
-  expect(error).toBeNull();
-  return receipt!.id as string;
-}
+/** One 1,5 L bottle line on a receipt. */
+const cola = (productId: string, store: string, at: string, quantity: number, unitPrice: number, discount = 0) => ({
+  store,
+  at,
+  lines: [{ text: "TEST COLA ZERO 1,5L", quantity, unitPrice, discount, productId }],
+});
 
 test.describe("Price history", () => {
   test.skip(!testUser, "TEST_USER_EMAIL / TEST_USER_PASSWORD not set");
@@ -57,8 +26,7 @@ test.describe("Price history", () => {
   const name = `Cola Zero test-${crypto.randomUUID().slice(0, 8)}`;
 
   test.beforeEach(async ({ page }) => {
-    supabase = createClient(url, anonKey, { auth: { persistSession: false } });
-    expect((await supabase.auth.signInWithPassword(testUser!)).error).toBeNull();
+    supabase = await signedInClient(testUser!);
     const { data } = await supabase
       .from("products")
       .insert({ name, size_value: 1.5, size_unit: "L" })
@@ -85,9 +53,9 @@ test.describe("Price history", () => {
   test("shows the shelf price and what you paid per litre, over time", async ({ page }) => {
     // 1,5 L bottles: € 1,79 at AH, then 2 for € 3,38 with € 0,50 Bonus at Hoogvliet, then € 1,99 at AH
     receiptIds.push(
-      await confirmReceipt(supabase, productId, { store: "Albert Heijn", at: "2026-09-01T12:00:00+02:00", quantity: 1, unitPrice: 1.79 }),
-      await confirmReceipt(supabase, productId, { store: "Hoogvliet", at: "2026-10-01T12:00:00+02:00", quantity: 2, unitPrice: 1.69, discount: 0.5 }),
-      await confirmReceipt(supabase, productId, { store: "Albert Heijn", at: "2026-11-01T12:00:00+01:00", quantity: 1, unitPrice: 1.99 }),
+      await confirmReceipt(supabase, cola(productId, "Albert Heijn", "2026-09-01T12:00:00+02:00", 1, 1.79)),
+      await confirmReceipt(supabase, cola(productId, "Hoogvliet", "2026-10-01T12:00:00+02:00", 2, 1.69, 0.5)),
+      await confirmReceipt(supabase, cola(productId, "Albert Heijn", "2026-11-01T12:00:00+01:00", 1, 1.99)),
     );
     await page.reload();
 

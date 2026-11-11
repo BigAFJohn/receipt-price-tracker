@@ -85,7 +85,8 @@ export async function PriceHistory({
         </dl>
       )}
 
-      {unit && (
+      {/* A chart needs at least two purchases to show a change; one is in the table. */}
+      {unit && points.length >= 2 && (
         <PriceChart
           points={points}
           unit={unit}

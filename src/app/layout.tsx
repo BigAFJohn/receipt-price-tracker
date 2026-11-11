@@ -17,6 +17,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           </Link>
           <Link href="/receipts">Receipts</Link>
           <Link href="/products">Products</Link>
+          <Link href="/spending">Spending</Link>
         </nav>
         {children}
       </body>
