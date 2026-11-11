@@ -16,7 +16,7 @@ function perfect(): NormalizedReceipt {
     purchased_at: golden.purchased_at,
     total: golden.total,
     totals_match: true,
-    lines: golden.lines.map((l, i) => ({ ...l, line_no: i + 1, sku: l.sku ?? null, confidence: 1 })),
+    lines: golden.lines.map((l, i) => ({ ...l, line_no: i + 1, sku: l.sku ?? null, confidence: 1, suggested_product: null })),
   };
 }
 

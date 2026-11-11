@@ -1,5 +1,6 @@
 import { linesMatchTotal } from "@/lib/pricing";
-import type { ExtractedReceipt } from "./schema";
+import type { SuggestedProduct } from "@/lib/product-matching";
+import type { ExtractedLine, ExtractedReceipt } from "./schema";
 
 export type NormalizedLine = {
   line_no: number;
@@ -12,6 +13,7 @@ export type NormalizedLine = {
   discount: number;
   is_deposit: boolean;
   confidence: number;
+  suggested_product: SuggestedProduct | null;
 };
 
 export type NormalizedReceipt = {
@@ -70,6 +72,25 @@ export function isValidTime(time: string): boolean {
   return !!match && Number(match[1]) < 24 && Number(match[2]) < 60;
 }
 
+/**
+ * Tidies Claude's product suggestion: no product for a deposit or a blank
+ * name, and no size unless both the amount and the unit make sense.
+ */
+export function normalizeSuggestion(line: Pick<ExtractedLine, "is_deposit" | "product">): SuggestedProduct | null {
+  const p = line.product;
+  const name = p?.name.trim().replace(/\s+/g, " ").slice(0, 120);
+  if (!p || line.is_deposit || !name) return null;
+  const hasSize = p.size_value !== null && p.size_value > 0 && p.size_value <= 100_000 && p.size_unit !== null;
+  return {
+    name,
+    existing: p.existing,
+    brand: p.brand?.trim().slice(0, 80) || null,
+    size_value: hasSize ? round(p.size_value!, 3) : null,
+    size_unit: hasSize ? p.size_unit : null,
+    category: p.category,
+  };
+}
+
 /** Rounds amounts, makes discounts positive, numbers the lines and checks the total. */
 export function normalizeExtraction(raw: ExtractedReceipt): NormalizedReceipt {
   const lines = raw.lines.map((l, i) => ({
@@ -83,6 +104,7 @@ export function normalizeExtraction(raw: ExtractedReceipt): NormalizedReceipt {
     discount: round(Math.abs(l.discount), 2),
     is_deposit: l.is_deposit,
     confidence: Math.min(1, Math.max(0, l.confidence)),
+    suggested_product: normalizeSuggestion(l),
   }));
 
   const total = round(raw.total, 2);

@@ -115,6 +115,26 @@ describe("ReceiptInputSchema", () => {
     expect(result.error?.issues[0].message).toBe("Choose a store from the list");
   });
 
+  it("keeps a line's product and Claude's suggestion, and treats them as optional", () => {
+    const product_id = "00000000-0000-0000-0000-000000000009";
+    const suggested_product = {
+      name: "Croissant",
+      existing: false,
+      brand: null,
+      size_value: 1,
+      size_unit: "pcs" as const,
+      category: "Bread & bakery",
+    };
+    const parsed = ReceiptInputSchema.parse({ ...valid, lines: [{ ...valid.lines[0], product_id, suggested_product }] });
+    expect(parsed.lines[0]).toMatchObject({ product_id, suggested_product });
+    expect(ReceiptInputSchema.parse(valid).lines[0]).toMatchObject({ product_id: null, suggested_product: null });
+  });
+
+  it("rejects a product id that isn't a uuid, with a readable message", () => {
+    const result = ReceiptInputSchema.safeParse({ ...valid, lines: [{ ...valid.lines[0], product_id: "cola" }] });
+    expect(result.error?.issues[0].message).toBe("Choose a product from the list");
+  });
+
   it("rejects a malformed date", () => {
     expect(ReceiptInputSchema.safeParse({ ...valid, date: "08-11-2026" }).success).toBe(false);
   });

@@ -5,11 +5,15 @@ import { redirect } from "next/navigation";
 import { ExtractionError, extractFromImage, type ExtractionResult } from "@/lib/extraction/extract";
 import { amsterdamToIso } from "@/lib/extraction/normalize";
 import { linesMatchTotal } from "@/lib/pricing";
+import { matchProduct } from "@/lib/product-matching";
+import { formatSize, type StoredUnit } from "@/lib/product-size";
 import { isOwnReceiptImagePath } from "@/lib/receipt-image";
 import { ReceiptInputSchema, type ReceiptInput } from "@/lib/receipt-input";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type ActionResult = { error: string | null };
+
+type TrackedRow = { id: string; name: string; brand: string | null; size_value: number | null; size_unit: StoredUnit | null };
 
 async function currentUser() {
   const supabase = await createSupabaseServerClient();
@@ -90,12 +94,25 @@ export async function extractReceipt(
     .download(receipt.image_path);
   if (downloadError || !photo) return fail("The photo could not be loaded. Try again.");
 
-  const { data: stores } = await supabase.from("stores").select("id, name");
-  const storeNames = (stores ?? []).map((s) => s.name);
+  const [{ data: stores }, { data: categories }, { data: products }] = await Promise.all([
+    supabase.from("stores").select("id, name"),
+    supabase.from("categories").select("name").order("name"),
+    supabase.from("products").select("id, name, brand, size_value, size_unit").order("name"),
+  ]);
+  const tracked = (products ?? []) as TrackedRow[];
 
   let result: ExtractionResult;
   try {
-    result = await extractFromImage(Buffer.from(await photo.arrayBuffer()), { stores: storeNames });
+    result = await extractFromImage(Buffer.from(await photo.arrayBuffer()), {
+      stores: (stores ?? []).map((s) => s.name),
+      categories: (categories ?? []).map((c) => c.name),
+      // So Claude recognises the products you already track.
+      products: tracked.map((p) => ({
+        name: p.name,
+        brand: p.brand,
+        size: p.size_value && p.size_unit ? formatSize(Number(p.size_value), p.size_unit) : null,
+      })),
+    });
   } catch (err) {
     console.error("[extract]", err);
     return fail(err instanceof ExtractionError ? err.message : "Claude could not read the receipt. Try again.");
@@ -127,12 +144,18 @@ export async function extractReceipt(
     .eq("id", receipt.id)
     .select("id");
 
-    if (updateError) {
+  if (updateError) {
     console.error("[extract] update failed:", updateError.code, updateError.message);
     // Recorded on the receipt, so its page shows the form to fill in by hand.
     return fail("The reading could not be saved.");
   }
   if (!updated?.length) return { error: null };
+
+  // What you matched before at this store, by receipt text.
+  const { data: aliasRows } = storeId
+    ? await supabase.from("product_aliases").select("raw_text, product_id").eq("store_id", storeId)
+    : { data: [] };
+  const aliases = new Map((aliasRows ?? []).map((a) => [a.raw_text, a.product_id]));
 
   await supabase.from("receipt_lines").delete().eq("receipt_id", receipt.id);
   const { error: linesError } = await supabase.from("receipt_lines").insert(
@@ -148,6 +171,8 @@ export async function extractReceipt(
       discount: l.discount,
       is_deposit: l.is_deposit,
       confidence: l.confidence,
+      product_id: matchProduct(l, aliases, tracked).productId,
+      suggested_product: l.suggested_product,
     })),
   );
 
@@ -204,6 +229,7 @@ export async function saveReceipt(
     console.error("[receipts] save failed:", error.code, error.message);
     if (error.code === "P0002") return { error: "This receipt can't be changed: it was confirmed or deleted." };
     if (error.code === "23514") return { error: "The lines don't add up to the total yet." };
+    if (error.code === "23503") return { error: "One of the products no longer exists. Choose it again." };
     return { error: "The receipt could not be saved. Try again." };
   }
 

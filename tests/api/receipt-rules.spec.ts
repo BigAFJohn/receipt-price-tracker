@@ -77,4 +77,57 @@ test.describe("Saving receipts (database rules)", () => {
       await supabase.auth.signOut({ scope: "local" });
     }
   });
+
+  test("signed in: confirming remembers each line's product for that store", async () => {
+    const supabase = client();
+    const { error: authError } = await supabase.auth.signInWithPassword(testUser!);
+    expect(authError).toBeNull();
+
+    const { data: store } = await supabase.from("stores").select("id").eq("name", "Hoogvliet").single();
+    const { data: product } = await supabase
+      .from("products")
+      .insert({ name: `Croissant test-${crypto.randomUUID().slice(0, 8)}`, size_value: 1, size_unit: "pcs" })
+      .select("id")
+      .single();
+    const { data: draft } = await supabase.from("receipts").insert({ status: "draft" }).select("id").single();
+    const text = `TEST CROISSANT ${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    const args = (productId: string, confirm: boolean) => ({
+      ...saveArgs(draft!.id, 1, confirm),
+      p_store_id: store!.id,
+      p_lines: [
+        { ...lines[0], raw_text: ` ${text.toLowerCase()} `, product_id: productId },
+        { ...lines[0], line_no: 2, raw_text: "STATIEGELD", unit_price: 0, line_total: 0, is_deposit: true, product_id: productId },
+      ],
+    });
+
+    try {
+      // Only your own products
+      const unknown = await supabase.rpc("save_receipt", args(crypto.randomUUID(), false));
+      expect(unknown.error?.code).toBe("23503");
+
+      // A draft save keeps the products but remembers nothing yet
+      expect((await supabase.rpc("save_receipt", args(product!.id, false))).error).toBeNull();
+      const alias = () =>
+        supabase.from("product_aliases").select("product_id").eq("store_id", store!.id).eq("raw_text", text);
+      expect((await alias()).data).toHaveLength(0);
+
+      // Confirming remembers the text (spacing and case ignored); a deposit never gets a product
+      expect((await supabase.rpc("save_receipt", args(product!.id, true))).error).toBeNull();
+      expect((await alias()).data).toEqual([{ product_id: product!.id }]);
+      const { data: saved } = await supabase
+        .from("receipt_lines")
+        .select("line_no, product_id")
+        .eq("receipt_id", draft!.id)
+        .order("line_no");
+      expect(saved).toEqual([
+        { line_no: 1, product_id: product!.id },
+        { line_no: 2, product_id: null },
+      ]);
+    } finally {
+      await supabase.from("receipts").delete().eq("id", draft!.id);
+      // Deleting the product removes what was remembered for it.
+      await supabase.from("products").delete().eq("id", product!.id);
+      await supabase.auth.signOut({ scope: "local" });
+    }
+  });
 });

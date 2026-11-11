@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SuggestedProductSchema } from "./product-matching";
 
 /**
  * Reads an amount as people type it: "2,58", "2.58", "€ 2,58" → 2.58.
@@ -42,6 +43,9 @@ export const ReceiptLineInputSchema = z.object({
   discount: amount,
   is_deposit: z.boolean(),
   confidence: z.number().min(0).max(1).nullable(),
+  // guid(): any id in Postgres's uuid format; the database checks it's one of your products.
+  product_id: z.guid("Choose a product from the list").nullable().default(null),
+  suggested_product: SuggestedProductSchema.nullable().default(null),
 });
 
 /** What the review screen sends to the server. Checked again there: never trust the browser. */
@@ -54,8 +58,8 @@ export const ReceiptInputSchema = z.object({
   lines: z.array(ReceiptLineInputSchema).max(200),
 });
 
-export type ReceiptLineInput = z.infer<typeof ReceiptLineInputSchema>;
-export type ReceiptInput = z.infer<typeof ReceiptInputSchema>;
+export type ReceiptLineInput = z.input<typeof ReceiptLineInputSchema>;
+export type ReceiptInput = z.input<typeof ReceiptInputSchema>;
 
 /** Sum of what the lines cost after discounts, rounded to the cent. */
 export function sumLines(lines: Pick<ReceiptLineInput, "line_total" | "discount">[]): number {

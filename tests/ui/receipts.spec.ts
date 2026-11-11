@@ -45,7 +45,7 @@ test.describe("Receipts", () => {
     await expect(page.getByTestId("signed-in-as")).toBeVisible();
   });
 
-    test("uploading opens the receipt for review; deleting the draft returns to the list", async ({ page }) => {
+  test("uploading opens the receipt for review; deleting the draft returns to the list", async ({ page }) => {
     const id = await upload(page, TEST_IMAGE);
     await expect(page.getByRole("img", { name: "Receipt photo" })).toBeVisible();
 
@@ -108,6 +108,59 @@ test.describe("Receipts", () => {
     await page.getByRole("button", { name: "Reopen for editing" }).click();
     await expect(page.getByTestId("review-form")).toBeVisible();
     await deleteDraft(page, id);
+  });
+
+  test("remembers a line's product for the next receipt from the same store", async ({ page }) => {
+    // Calls the real Claude API twice, so it only runs when asked: E2E_EXTRACTION=1.
+    // Note: it replaces what was remembered for this receipt's first line at Hoogvliet,
+    // and deleting its test product at the end forgets that line again.
+    test.skip(process.env.E2E_EXTRACTION !== "1", "set E2E_EXTRACTION=1 to run");
+    test.skip(!existsSync(SAMPLE), `needs ${SAMPLE}`);
+    const product = `Croissant test-${crypto.randomUUID().slice(0, 8)}`;
+    // Next.js keeps recent pages alive, hidden; only the one on screen counts.
+    const onScreen = (testId: string) => page.getByTestId(testId).filter({ visible: true });
+
+    // First receipt: add a new product from line 1, leave line 2 untracked, confirm
+    const first = await upload(page, SAMPLE);
+    await waitForReading(page);
+    await page.getByLabel("Product, line 1").selectOption({ label: "New product…" });
+    const newProduct = onScreen("line-row").first().getByTestId("product-form");
+    await newProduct.getByLabel("Name").fill(product);
+    await newProduct.getByLabel("Size").fill("1");
+    await newProduct.getByLabel("Unit").selectOption("pcs");
+    await newProduct.getByRole("button", { name: "Add product" }).click();
+    await expect(page.getByLabel("Product, line 1").locator("option:checked")).toHaveText(`${product} · 1 pcs`);
+    await page.getByLabel("Product, line 2").selectOption({ label: "No product (not tracked)" });
+    await expect(onScreen("match-summary")).toContainText("1 of 2 items matched to a product.");
+    await page.getByRole("button", { name: "Confirm receipt" }).click();
+    await expect(page).toHaveURL(/\/receipts$/);
+
+    // The confirmed receipt shows the product
+    await page.locator(`[data-receipt-id="${first}"]`).getByRole("link").click();
+    await expect(onScreen("line-product")).toHaveText(product);
+    // Back through the menu, as you would (a fresh page load could race the file picker).
+    await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Receipts" }).click();
+    await expect(page).toHaveURL(/\/receipts$/);
+
+    // Second receipt from the same store: line 1 is matched by itself
+    const second = await upload(page, SAMPLE);
+    await waitForReading(page);
+    await expect(page.getByLabel("Product, line 1").locator("option:checked")).toHaveText(`${product} · 1 pcs`);
+    await expect(onScreen("line-row").first().getByTestId("product-note")).toHaveText(
+      "Remembered from an earlier receipt.",
+    );
+
+    // Clean up: both receipts, then the product
+    await deleteDraft(page, second);
+    await page.locator(`[data-receipt-id="${first}"]`).getByRole("link").click();
+    await page.getByRole("button", { name: "Reopen for editing" }).click();
+    await expect(onScreen("review-form")).toBeVisible();
+    await deleteDraft(page, first);
+    await page.goto("/products");
+    await page.getByTestId("product-list").getByRole("link", { name: product }).click();
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Delete product" }).click();
+    await expect(page).toHaveURL(/\/products$/);
   });
 
   test("rejects a file that isn't a photo", async ({ page }) => {

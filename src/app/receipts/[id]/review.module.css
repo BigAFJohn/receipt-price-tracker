@@ -284,3 +284,33 @@
   color: var(--accent);
   font-size: 12px;
 }
+
+.productLink {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.product {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 6px;
+}
+
+.productNote {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.newProduct {
+  padding: 12px;
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+}
+
+.matchSummary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
