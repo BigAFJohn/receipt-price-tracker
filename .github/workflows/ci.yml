@@ -31,8 +31,12 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Only the browser itself, which comes from Playwright's own download
+      # server. GitHub's Ubuntu runners already have the system libraries
+      # Chromium needs (they ship Google Chrome), so --with-deps isn't needed;
+      # it only added fonts, from Ubuntu's servers, which were sometimes down.
       - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       # Runs without Supabase secrets, so pull requests from forks of this
       # public repo can't read them. The "connected" tests are skipped here.
