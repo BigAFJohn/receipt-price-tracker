@@ -25,16 +25,15 @@ export type MatchSource = "remembered" | "suggested";
 export type ProductMatch = { productId: string | null; source: MatchSource | null };
 
 /**
- * Picks a line's product:
- * 1. what you chose for the same text at the same store before (`aliases`),
- * 2. otherwise the product you already track that Claude named,
- * 3. otherwise none; the review screen offers Claude's new product instead.
- * A deposit is never a product.
+ * Picks a line's product only from what you chose for the same text at the
+ * same store before (`aliases`), so nothing is linked unless you confirmed it
+ * once. Claude's guesses are offered on the review screen instead (see
+ * `claudesGuess`). A deposit is never a product.
  */
 export function matchProduct(
-  line: { raw_text: string; is_deposit: boolean; suggested_product: SuggestedProduct | null },
+  line: { raw_text: string; is_deposit: boolean },
   aliases: Map<string, string>,
-  products: { id: string; name: string }[],
+  products: { id: string }[],
 ): ProductMatch {
   if (line.is_deposit) return { productId: null, source: null };
 
@@ -42,13 +41,40 @@ export function matchProduct(
   if (remembered && products.some((p) => p.id === remembered)) {
     return { productId: remembered, source: "remembered" };
   }
-
-  const suggestion = line.suggested_product;
-  if (suggestion?.existing) {
-    const name = suggestion.name.trim().toLowerCase();
-    const found = products.find((p) => p.name.trim().toLowerCase() === name);
-    if (found) return { productId: found.id, source: "suggested" };
-  }
-
   return { productId: null, source: null };
+}
+
+/**
+ * The tracked product Claude thinks a line is, if it named one you have.
+ * Offered as a one-click choice, never chosen for you: Claude can confuse
+ * products that share a store or brand name.
+ */
+export function claudesGuess<P extends { name: string }>(
+  suggestion: SuggestedProduct | null,
+  products: P[],
+): P | null {
+  if (!suggestion?.existing) return null;
+  const name = suggestion.name.trim().toLowerCase();
+  return products.find((p) => p.name.trim().toLowerCase() === name) ?? null;
+}
+
+/**
+ * Lines with different receipt text linked to the same product: usually a
+ * mistake (say, the orange juice linked to the croissant). Returns the line
+ * numbers (from 1) per product, only for products that have such lines.
+ */
+export function sharedProducts(
+  lines: { raw_text: string; is_deposit: boolean; product_id: string | null }[],
+): Map<string, number[]> {
+  const byProduct = new Map<string, { numbers: number[]; texts: Set<string> }>();
+  lines.forEach((l, i) => {
+    if (l.is_deposit || !l.product_id) return;
+    const entry = byProduct.get(l.product_id) ?? { numbers: [], texts: new Set<string>() };
+    entry.numbers.push(i + 1);
+    entry.texts.add(receiptTextKey(l.raw_text));
+    byProduct.set(l.product_id, entry);
+  });
+  return new Map(
+    [...byProduct].filter(([, e]) => e.texts.size > 1).map(([productId, e]) => [productId, e.numbers]),
+  );
 }
