@@ -42,7 +42,7 @@ export function scoreExtraction(golden: GoldenReceipt, actual: NormalizedReceipt
     "purchased_at",
     golden.purchased_at,
     actual.purchased_at,
-    sameMinute(golden.purchased_at, actual.purchased_at),
+    !!actual.purchased_at && sameMinute(golden.purchased_at, actual.purchased_at),
   );
   check("total", golden.total, actual.total, sameMoney(golden.total, actual.total));
   check("line count", golden.lines.length, actual.lines.length, golden.lines.length === actual.lines.length);

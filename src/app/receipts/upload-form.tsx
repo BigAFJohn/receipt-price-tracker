@@ -1,9 +1,10 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { fitWithin, receiptImagePath, validateReceiptFile } from "@/lib/receipt-image";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { createDraftReceipt, extractReceipt } from "./actions";
+import { createDraftReceipt } from "./actions";
 import styles from "./receipts.module.css";
 
 /**
@@ -29,6 +30,7 @@ type Status = { kind: "idle" } | { kind: "busy"; message: string } | { kind: "er
 export function UploadForm({ userId }: { userId: string }) {
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const inputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
 
   async function handleFile(file: File) {
     const problem = validateReceiptFile(file);
@@ -61,13 +63,9 @@ export function UploadForm({ userId }: { userId: string }) {
         return;
       }
 
-      setStatus({ kind: "busy", message: "Reading receipt…" });
-      const read = await extractReceipt(draft.receiptId);
-      setStatus(
-        read.error
-          ? { kind: "error", message: `Saved as a draft, but it couldn't be read: ${read.error}` }
-          : { kind: "idle" },
-      );
+      // The receipt's own page reads it and shows the result for review.
+      setStatus({ kind: "busy", message: "Opening…" });
+      router.push(`/receipts/${draft.receiptId}`);
     } catch (err) {
       console.error("[upload]", err);
       setStatus({ kind: "error", message: "That photo could not be read. Try another one." });

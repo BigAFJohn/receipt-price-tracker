@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { testUser } from "../expected";
@@ -8,15 +8,36 @@ const TEST_IMAGE = path.join(__dirname, "../fixtures/images/test-receipt.png");
 /** A real receipt photo, kept out of the repo in samples/. */
 const SAMPLE = "samples/hoogvliet-2026-11-08.jpg";
 
-/** Reading a receipt takes several seconds; the new draft appears once it's done. */
+/** Reading a receipt takes several seconds. */
 const READ_TIMEOUT = 60_000;
+const REVIEW_URL = /\/receipts\/([0-9a-f-]{36})$/;
 
-test.describe("Receipt upload", () => {
+/** Uploads a photo and returns the new receipt's id, read from its review page address. */
+async function upload(page: Page, file: string): Promise<string> {
+  await page.getByLabel("Receipt photo").setInputFiles(file);
+  await expect(page).toHaveURL(REVIEW_URL, { timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "Review receipt" })).toBeVisible();
+  return REVIEW_URL.exec(page.url())![1];
+}
+
+/** Waits until the receipt has been read (successfully or not). */
+async function waitForReading(page: Page) {
+  await expect(page.getByTestId("reading")).toBeHidden({ timeout: READ_TIMEOUT });
+}
+
+/** Deletes the draft open on the page and checks it's gone from the list. */
+async function deleteDraft(page: Page, id: string) {
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Delete draft" }).click();
+  await expect(page).toHaveURL(/\/receipts$/);
+  await expect(page.locator(`[data-receipt-id="${id}"]`)).toHaveCount(0);
+}
+
+test.describe("Receipts", () => {
   test.skip(!testUser, "TEST_USER_EMAIL / TEST_USER_PASSWORD not set");
-  // These tests add and delete receipts in the same account, so they must not
-  // run in parallel or they'd see each other's drafts.
   // Each test may wait up to READ_TIMEOUT for Claude, so allow more than the 30 s default.
-  test.describe.configure({ mode: "default", timeout: READ_TIMEOUT + 30_000 });
+  // Tests find their own receipt by id, so receipts added by other tests don't matter.
+  test.describe.configure({ timeout: READ_TIMEOUT + 30_000 });
 
   test.beforeEach(async ({ page }) => {
     await page.goto("/receipts");
@@ -24,45 +45,61 @@ test.describe("Receipt upload", () => {
     await expect(page.getByTestId("signed-in-as")).toBeVisible();
   });
 
-  test("uploads a photo as a draft, then deletes it", async ({ page }) => {
-    const items = page.getByTestId("receipt-item");
-    const before = await items.count();
+  test("uploading opens the receipt for review; deleting the draft returns to the list", async ({ page }) => {
+    const id = await upload(page, TEST_IMAGE);
+    await expect(page.getByRole("img", { name: "Receipt photo" })).toBeVisible();
 
-    await page.getByLabel("Receipt photo").setInputFiles(TEST_IMAGE);
+    await waitForReading(page);
+    // Whatever Claude makes of the test image, the draft can be reviewed.
+    await expect(page.getByTestId("review-form")).toBeVisible();
 
-    // Wait until reading has finished (successfully or not), then check the new draft.
-    await expect(page.getByText("Add receipt photo")).toBeVisible({ timeout: READ_TIMEOUT });
-    await expect(items).toHaveCount(before + 1, { timeout: READ_TIMEOUT });
-    const newest = items.first();
-    await expect(newest.getByText("Draft")).toBeVisible();
-    await expect(newest.getByRole("img", { name: "Receipt photo" })).toBeVisible();
-
-    // Clean up, so the test leaves your data as it found it.
-    page.once("dialog", (dialog) => dialog.accept());
-    await newest.getByRole("button", { name: "Delete" }).click();
-    await expect(items).toHaveCount(before);
+    await deleteDraft(page, id);
   });
 
-  test("reads a real receipt with Claude", async ({ page }) => {
+  test("reviews, corrects and confirms a real receipt", async ({ page }) => {
     // Calls the real Claude API, so it only runs when asked: E2E_EXTRACTION=1
     test.skip(process.env.E2E_EXTRACTION !== "1", "set E2E_EXTRACTION=1 to run");
     test.skip(!existsSync(SAMPLE), `needs ${SAMPLE}`);
 
-    const items = page.getByTestId("receipt-item");
-    const before = await items.count();
+    const id = await upload(page, SAMPLE);
+    await waitForReading(page);
 
-    await page.getByLabel("Receipt photo").setInputFiles(SAMPLE);
-    await expect(items).toHaveCount(before + 1, { timeout: READ_TIMEOUT });
-    const newest = items.first();
+    // What Claude read
+    await expect(page.getByTestId("line-row")).toHaveCount(2);
+    await expect(page.getByLabel("Store").locator("option:checked")).toHaveText("Hoogvliet");
+    await expect(page.getByLabel("Total paid (€)")).toHaveValue("2.87");
+    await expect(page.getByTestId("totals-check")).toContainText("Lines add up to the total");
 
-    await expect(newest.getByTestId("receipt-summary")).toContainText("Hoogvliet");
-    await expect(newest.getByTestId("receipt-summary")).toContainText("2,87");
-    await expect(newest.getByTestId("receipt-summary")).toContainText("2 items");
-    await expect(newest.getByTestId("extraction-status")).toHaveText("Lines add up to the total");
+    // A wrong quantity recalculates the line, breaks the totals check and blocks confirming
+    const quantity = page.getByLabel("Quantity, line 1");
+    await quantity.fill("3");
+    await expect(page.getByLabel("Line total, line 1")).toHaveValue("1.44");
+    await expect(page.getByTestId("totals-check")).toContainText("difference");
+    await expect(page.getByRole("button", { name: "Confirm receipt" })).toBeDisabled();
 
-    page.once("dialog", (dialog) => dialog.accept());
-    await newest.getByRole("button", { name: "Delete" }).click();
-    await expect(items).toHaveCount(before);
+    await quantity.fill("2");
+    await expect(page.getByTestId("totals-check")).toContainText("Lines add up to the total");
+
+    // A saved draft keeps its edits
+    await page.getByLabel("Description, line 2").fill("APPELSIENTJE MULTI 1L");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect(page.getByRole("status")).toHaveText("Draft saved.");
+    await page.reload();
+    await expect(page.getByLabel("Description, line 2")).toHaveValue("APPELSIENTJE MULTI 1L");
+
+    // Confirming returns to the list
+    await page.getByRole("button", { name: "Confirm receipt" }).click();
+    await expect(page).toHaveURL(/\/receipts$/);
+    const item = page.locator(`[data-receipt-id="${id}"]`);
+    await expect(item).toContainText("Confirmed");
+    await expect(item).toContainText("Hoogvliet");
+
+    // A confirmed receipt can be reopened, then deleted as a draft
+    await item.getByRole("link").click();
+    await expect(page.getByTestId("confirmed-summary")).toContainText("Hoogvliet");
+    await page.getByRole("button", { name: "Reopen for editing" }).click();
+    await expect(page.getByTestId("review-form")).toBeVisible();
+    await deleteDraft(page, id);
   });
 
   test("rejects a file that isn't a photo", async ({ page }) => {

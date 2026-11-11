@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -143,22 +144,24 @@ async function SignedInContent() {
           {receipts.map((r) => {
             const src = r.image_path ? urlFor.get(r.image_path) : undefined;
             return (
-              <li key={r.id} className={styles.item} data-testid="receipt-item">
-                {src ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- signed URLs change hourly
-                  <img src={src} alt="Receipt photo" className={styles.thumb} />
-                ) : (
-                  <span className={styles.thumb} aria-hidden />
-                )}
-                <div className={styles.meta}>
-                  <ReceiptSummary receipt={r} />
-                  <span className={styles.statusRow}>
-                    <span className={r.status === "draft" ? styles.draft : styles.confirmed}>
-                      {r.status === "draft" ? "Draft" : "Confirmed"}
+              <li key={r.id} className={styles.item} data-testid="receipt-item" data-receipt-id={r.id}>
+                <Link href={`/receipts/${r.id}`} className={styles.itemLink}>
+                  {src ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- signed URLs change hourly
+                    <img src={src} alt="Receipt photo" className={styles.thumb} />
+                  ) : (
+                    <span className={styles.thumb} aria-hidden />
+                  )}
+                  <div className={styles.meta}>
+                    <ReceiptSummary receipt={r} />
+                    <span className={styles.statusRow}>
+                      <span className={r.status === "draft" ? styles.draft : styles.confirmed}>
+                        {r.status === "draft" ? "Draft" : "Confirmed"}
+                      </span>
+                      <ExtractionStatus receipt={r} />
                     </span>
-                    <ExtractionStatus receipt={r} />
-                  </span>
-                </div>
+                  </div>
+                </Link>
                 {r.status === "draft" && (
                   <div className={styles.actions}>
                     {(!r.extracted_at || r.extraction_error) && (

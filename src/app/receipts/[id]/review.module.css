@@ -1,0 +1,286 @@
+.main {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 32px 16px 64px;
+}
+
+.back {
+  margin: 0 0 16px;
+}
+
+.back a {
+  color: var(--accent);
+}
+
+.layout {
+  display: grid;
+  gap: 24px;
+}
+
+@media (min-width: 840px) {
+  .layout {
+    grid-template-columns: 320px 1fr;
+    align-items: start;
+  }
+
+  .photo {
+    position: sticky;
+    top: 16px;
+  }
+}
+
+.photo {
+  margin: 0;
+}
+
+.photo img {
+  display: block;
+  width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--line);
+}
+
+.photo figcaption {
+  margin-top: 6px;
+  font-size: 13px;
+}
+
+.noPhoto {
+  display: grid;
+  place-items: center;
+  height: 200px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+}
+
+.details {
+  min-width: 0;
+}
+
+.title {
+  margin: 0 0 8px;
+  font-size: 28px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.reading {
+  padding: 24px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.form {
+  display: grid;
+  gap: 20px;
+}
+
+.form fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.header {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.field input,
+.field select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 15px;
+}
+
+.field input[aria-invalid="true"] {
+  border-color: var(--warn);
+  outline: 1px solid var(--warn);
+}
+
+.lines {
+  display: grid;
+  gap: 12px;
+}
+
+.lines legend {
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.line {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.unsure {
+  border-color: var(--warn);
+}
+
+.unsureNote {
+  color: var(--warn);
+}
+
+.flags {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  gap: 8px 20px;
+  align-items: center;
+  font-size: 14px;
+}
+
+.flags button {
+  margin-left: auto;
+}
+
+@media (max-width: 520px) {
+  .line {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.okBox,
+.warnBox {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.okBox {
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+
+.warnBox {
+  border: 1px solid var(--warn);
+  color: var(--warn);
+}
+
+.error {
+  margin: 0;
+  color: var(--warn);
+}
+
+.ok {
+  margin: 0;
+  color: var(--accent);
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.primary,
+.secondary {
+  padding: 10px 16px;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary {
+  border: 0;
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.secondary {
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  justify-self: start;
+}
+
+.primary:disabled,
+.secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.dangerZone {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.table {
+  width: 100%;
+  margin: 16px 0 24px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.table th,
+.table td {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.num {
+  text-align: right !important;
+  white-space: nowrap;
+}
+
+.tag {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--line);
+  font-size: 12px;
+}
+
+.discount {
+  color: var(--accent);
+  font-size: 12px;
+}

@@ -151,3 +151,18 @@
 .mutedText {
   color: var(--muted);
 }
+
+.itemLink {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.itemLink:hover strong,
+.itemLink:focus-visible strong {
+  text-decoration: underline;
+}

@@ -12,10 +12,10 @@ export async function createSupabaseServerClient() {
   // Read cookies first, even when unconfigured: this marks every caller as
   // request-time, so a missing key at build time is never frozen into a
   // prerendered page.
-     const cookieStore = await cookies();
-+  // Supabase reads the clock to check whether the session has expired;
-+  // io() keeps that out of Next.js's prerender.
-+  await io();
+  const cookieStore = await cookies();
+  // Supabase reads the clock to check whether the session has expired;
+  // io() keeps that out of Next.js's prerender.
+  await io();
 
   const config = getSupabaseConfig();
   if (!config) return null;
