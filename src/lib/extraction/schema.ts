@@ -42,7 +42,10 @@ export function buildExtractionSchema(stores: string[] = KNOWN_STORES) {
     purchase_date: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/)
-      .describe("Date of purchase as YYYY-MM-DD. Dutch receipts print day first: 08-11-2026 is 2026-11-08."),
+      .nullable()
+      .describe(
+        "Date of purchase as YYYY-MM-DD. Dutch receipts print day first: 08-11-2026 is 2026-11-08. Null when no date is printed or it can't be read; never make one up.",
+      ),
     purchase_time: z
       .string()
       .regex(/^\d{2}:\d{2}$/)

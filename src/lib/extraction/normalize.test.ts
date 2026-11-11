@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { amsterdamToIso, normalizeExtraction } from "./normalize";
+import { amsterdamToIso, isPlausibleDate, isValidTime, normalizeExtraction } from "./normalize";
 import type { ExtractedReceipt } from "./schema";
 
 describe("amsterdamToIso", () => {
@@ -80,5 +80,44 @@ describe("normalizeExtraction", () => {
     // 4.49 − 0.50 + 0.40 deposit = 4.39
     expect(result.totals_match).toBe(true);
     expect(normalizeExtraction({ ...raw, total: 9.99 }).totals_match).toBe(false);
+  });
+});
+
+describe("isPlausibleDate", () => {
+  const now = new Date("2026-11-11T08:00:00Z");
+
+  it.each(["2026-11-08", "2000-01-01", "2026-11-12"])("accepts %s", (date) => {
+    expect(isPlausibleDate(date, now)).toBe(true);
+  });
+
+  it.each([
+    ["0000-00-00", "no date at all"],
+    ["2026-02-30", "not a real day"],
+    ["2026-13-01", "no 13th month"],
+    ["1999-12-31", "before 2000"],
+    ["2027-11-08", "a misread year in the future"],
+    ["08-11-2026", "day first"],
+  ])("rejects %s (%s)", (date) => {
+    expect(isPlausibleDate(date, now)).toBe(false);
+  });
+});
+
+describe("isValidTime", () => {
+  it.each(["00:00", "17:17", "23:59"])("accepts %s", (time) => {
+    expect(isValidTime(time)).toBe(true);
+  });
+
+  it.each(["24:00", "12:60", "7:05"])("rejects %s", (time) => {
+    expect(isValidTime(time)).toBe(false);
+  });
+});
+
+describe("normalizeExtraction with a missing or impossible date", () => {
+  it.each([null, "0000-00-00", "2026-02-30"])("leaves the date empty for %s", (purchase_date) => {
+    expect(normalizeExtraction({ ...raw, purchase_date }).purchased_at).toBeNull();
+  });
+
+  it("keeps the date but uses midday when the time is impossible", () => {
+    expect(normalizeExtraction({ ...raw, purchase_time: "25:00" }).purchased_at).toBe("2026-11-08T12:00:00+01:00");
   });
 });

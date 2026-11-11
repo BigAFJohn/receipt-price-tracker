@@ -17,7 +17,7 @@ export type NormalizedLine = {
 export type NormalizedReceipt = {
   store: string;
   store_branch: string | null;
-  purchased_at: string; // ISO 8601 with the Amsterdam offset
+  purchased_at: string | null; // ISO 8601 with the Amsterdam offset; null when no usable date was read
   total: number;
   lines: NormalizedLine[];
   totals_match: boolean;
@@ -49,6 +49,27 @@ export function amsterdamToIso(date: string, time: string | null): string {
   return `${date}T${hhmm}:00${offset.text}`;
 }
 
+/**
+ * True for a real calendar date from 2000 up to tomorrow. Anything else
+ * ("0000-00-00", 30 February, a misread year far in the future) is treated
+ * as unread, so the review screen asks for the date instead.
+ */
+export function isPlausibleDate(date: string, now = new Date()): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return false;
+  const [y, m, d] = match.slice(1).map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d));
+  const isRealDate = day.getUTCFullYear() === y && day.getUTCMonth() === m - 1 && day.getUTCDate() === d;
+  const tomorrow = now.getTime() + 24 * 60 * 60 * 1000;
+  return isRealDate && y >= 2000 && day.getTime() <= tomorrow;
+}
+
+/** True for a real 24-hour clock time, "00:00" to "23:59". */
+export function isValidTime(time: string): boolean {
+  const match = /^(\d{2}):(\d{2})$/.exec(time);
+  return !!match && Number(match[1]) < 24 && Number(match[2]) < 60;
+}
+
 /** Rounds amounts, makes discounts positive, numbers the lines and checks the total. */
 export function normalizeExtraction(raw: ExtractedReceipt): NormalizedReceipt {
   const lines = raw.lines.map((l, i) => ({
@@ -69,7 +90,10 @@ export function normalizeExtraction(raw: ExtractedReceipt): NormalizedReceipt {
   return {
     store: raw.store,
     store_branch: raw.store_branch?.trim() || null,
-    purchased_at: amsterdamToIso(raw.purchase_date, raw.purchase_time),
+    purchased_at:
+      raw.purchase_date && isPlausibleDate(raw.purchase_date)
+        ? amsterdamToIso(raw.purchase_date, raw.purchase_time && isValidTime(raw.purchase_time) ? raw.purchase_time : null)
+        : null,
     total,
     lines,
     totals_match: linesMatchTotal(
