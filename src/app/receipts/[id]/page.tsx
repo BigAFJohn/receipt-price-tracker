@@ -2,13 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
+import { receiptTextKey, type MatchSource, type SuggestedProduct } from "@/lib/product-matching";
 import { formatForInput, toAmsterdamParts } from "@/lib/receipt-input";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { DeleteButton } from "../delete-button";
 import { ReadButton } from "../read-button";
 import { AutoRead } from "./auto-read";
 import { ReopenButton } from "./reopen-button";
-import { ReviewForm, type FormState } from "./review-form";
+import { ReviewForm, type FormState, type ProductOption } from "./review-form";
 import styles from "./review.module.css";
 
 export const metadata: Metadata = {
@@ -35,7 +36,13 @@ type LineRow = {
   discount: number;
   is_deposit: boolean;
   confidence: number | null;
+  product_id: string | null;
+  suggested_product: SuggestedProduct | null;
+  // A single product; typed loosely because supabase-js can't tell without generated types.
+  products: { name: string } | { name: string }[] | null;
 };
+
+const productName = (p: LineRow["products"]) => (Array.isArray(p) ? p[0]?.name : p?.name);
 
 export default function ReviewPage({ params }: PageProps<"/receipts/[id]">) {
   return (
@@ -61,7 +68,13 @@ async function Review({ id }: { id: string }) {
   // The proxy already sends signed-out visitors to /login; this is a backstop.
   if (!supabase || !user) redirect(`/login?next=/receipts/${id}`);
 
-  const [{ data: receipt }, { data: lines }, { data: stores }] = await Promise.all([
+  const [
+    { data: receipt },
+    { data: lines },
+    { data: stores },
+    { data: products },
+    { data: categories },
+  ] = await Promise.all([
     supabase
       .from("receipts")
       .select("id, status, image_path, store_id, purchased_at, total, extracted_at, extraction_error")
@@ -69,13 +82,23 @@ async function Review({ id }: { id: string }) {
       .maybeSingle(),
     supabase
       .from("receipt_lines")
-      .select("line_no, raw_text, sku, quantity, is_weighed, unit_price, line_total, discount, is_deposit, confidence")
+      .select(
+        "line_no, raw_text, sku, quantity, is_weighed, unit_price, line_total, discount, is_deposit, confidence, product_id, suggested_product, products(name)",
+      )
       .eq("receipt_id", id)
       .order("line_no"),
     supabase.from("stores").select("id, name").order("name"),
+    supabase.from("products").select("id, name, size_value, size_unit").order("name"),
+    supabase.from("categories").select("id, name").order("name"),
   ]);
 
   if (!receipt) notFound();
+
+  // What you matched before at this store, to show which lines were remembered.
+  const { data: aliasRows } = receipt.store_id
+    ? await supabase.from("product_aliases").select("raw_text, product_id").eq("store_id", receipt.store_id)
+    : { data: [] };
+  const aliases = new Map((aliasRows ?? []).map((a) => [a.raw_text as string, a.product_id as string]));
 
   const { data: photo } = receipt.image_path
     ? await supabase.storage.from("receipts").createSignedUrl(receipt.image_path, 60 * 60)
@@ -135,7 +158,9 @@ async function Review({ id }: { id: string }) {
               key={receipt.extracted_at ?? "unread"}
               receiptId={receipt.id}
               stores={storeList}
-              initial={toFormState(receipt, rows)}
+              products={(products ?? []) as ProductOption[]}
+              categories={categories ?? []}
+              initial={toFormState(receipt, rows, aliases)}
             />
 
             <div className={styles.dangerZone}>
@@ -151,7 +176,13 @@ async function Review({ id }: { id: string }) {
 function toFormState(
   receipt: { store_id: string | null; purchased_at: string | null; total: number | null },
   lines: LineRow[],
+  aliases: Map<string, string>,
 ): FormState {
+  const matchSource = (l: LineRow): MatchSource | null => {
+    if (!l.product_id) return null;
+    if (aliases.get(receiptTextKey(l.raw_text)) === l.product_id) return "remembered";
+    return l.suggested_product?.existing ? "suggested" : null;
+  };
   const when = receipt.purchased_at ? toAmsterdamParts(receipt.purchased_at) : { date: "", time: "" };
   return {
     store_id: receipt.store_id ?? "",
@@ -169,6 +200,9 @@ function toFormState(
       is_weighed: l.is_weighed,
       is_deposit: l.is_deposit,
       confidence: l.confidence === null ? null : Number(l.confidence),
+      product_id: l.product_id ?? "",
+      suggested_product: l.suggested_product,
+      match: matchSource(l),
     })),
   };
 }
@@ -207,6 +241,11 @@ function ConfirmedReceipt(props: {
               <td>
                 {l.raw_text}
                 {l.is_deposit && <span className={styles.tag}>deposit</span>}
+                {l.product_id && productName(l.products) && (
+                  <Link href={`/products/${l.product_id}`} className={styles.productLink} data-testid="line-product">
+                    {productName(l.products)}
+                  </Link>
+                )}
               </td>
               <td className={styles.num}>{l.is_weighed ? `${Number(l.quantity)} kg` : Number(l.quantity)}</td>
               <td className={styles.num}>

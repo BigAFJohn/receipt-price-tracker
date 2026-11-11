@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { ProductForm, type Category, type SavedProduct } from "@/app/products/product-form";
 import { linesMatchTotal } from "@/lib/pricing";
+import { receiptTextKey, type MatchSource, type SuggestedProduct } from "@/lib/product-matching";
+import { formatSize, type StoredUnit } from "@/lib/product-size";
 import { parseAmount, sumLines, type ReceiptInput } from "@/lib/receipt-input";
 import { saveReceipt } from "../actions";
 import styles from "./review.module.css";
@@ -18,6 +21,11 @@ export type FormLine = {
   is_weighed: boolean;
   is_deposit: boolean;
   confidence: number | null;
+  /** "" for no product. */
+  product_id: string;
+  suggested_product: SuggestedProduct | null;
+  /** How the product was chosen, shown under the picker until you change it. */
+  match: MatchSource | null;
 };
 
 export type FormState = {
@@ -28,10 +36,26 @@ export type FormState = {
   lines: FormLine[];
 };
 
+export type ProductOption = { id: string; name: string; size_value: number | null; size_unit: StoredUnit | null };
+
 /** Lines Claude was less sure about are highlighted for a closer look. */
 const LOW_CONFIDENCE = 0.8;
 
+/** The picker's "New product…" choice. */
+const NEW_PRODUCT = "new";
+
 const euro = new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" });
+
+const MATCH_NOTES: Record<MatchSource, string> = {
+  remembered: "Remembered from an earlier receipt.",
+  suggested: "Claude's match. Check it.",
+};
+
+const sizeOf = (p: { size_value: number | null; size_unit: StoredUnit | null }) =>
+  p.size_value && p.size_unit ? formatSize(p.size_value, p.size_unit) : null;
+
+/** "Coca-Cola Zero · 1,5 L" */
+const productLabel = (p: ProductOption) => [p.name, sizeOf(p)].filter(Boolean).join(" · ");
 
 /** Turns the typed form into the server's input, noting which fields can't be read. */
 function readForm(state: FormState): { input: ReceiptInput | null; invalid: Set<string> } {
@@ -60,6 +84,9 @@ function readForm(state: FormState): { input: ReceiptInput | null; invalid: Set<
       discount: num(`${l.key}.discount`, l.discount),
       is_deposit: l.is_deposit,
       confidence: l.confidence,
+      // A deposit is never a product.
+      product_id: l.is_deposit ? null : l.product_id || null,
+      suggested_product: l.suggested_product,
     };
   });
 
@@ -71,8 +98,17 @@ function readForm(state: FormState): { input: ReceiptInput | null; invalid: Set<
 
 type Message = { kind: "error" | "saved"; text: string } | null;
 
-export function ReviewForm(props: { receiptId: string; stores: { id: string; name: string }[]; initial: FormState }) {
+export function ReviewForm(props: {
+  receiptId: string;
+  stores: { id: string; name: string }[];
+  products: ProductOption[];
+  categories: Category[];
+  initial: FormState;
+}) {
   const [state, setState] = useState(props.initial);
+  const [products, setProducts] = useState(props.products);
+  /** The line whose "new product" form is open, if any. */
+  const [addingFor, setAddingFor] = useState<string | null>(null);
   const [message, setMessage] = useState<Message>(null);
   const [pending, startTransition] = useTransition();
 
@@ -89,11 +125,13 @@ export function ReviewForm(props: { receiptId: string; stores: { id: string; nam
         quantity: l.quantity,
         unitPrice: l.unit_price,
         lineTotal: l.line_total,
-        discount: l.discount,
+        discount: l.discount ?? 0,
         isDeposit: l.is_deposit,
       })),
       input.total,
     );
+  const items = state.lines.filter((l) => !l.is_deposit);
+  const matched = items.filter((l) => l.product_id).length;
 
   const set = (patch: Partial<FormState>) => {
     setMessage(null);
@@ -118,6 +156,39 @@ export function ReviewForm(props: { receiptId: string; stores: { id: string; nam
     }));
   };
 
+  /** A product added from a line is used for that line, and for unmatched lines with the same text. */
+  const productAdded = (forKey: string, product: SavedProduct) => {
+    setProducts((list) => [...list, product].sort((a, b) => a.name.localeCompare(b.name)));
+    setAddingFor(null);
+    setMessage(null);
+    setState((s) => {
+      const text = receiptTextKey(s.lines.find((l) => l.key === forKey)?.raw_text ?? "");
+      return {
+        ...s,
+        lines: s.lines.map((l) =>
+          l.key === forKey || (!l.product_id && !l.is_deposit && receiptTextKey(l.raw_text) === text)
+            ? { ...l, product_id: product.id, match: null }
+            : l,
+        ),
+      };
+    });
+  };
+
+  /**
+   * The new-product form starts from Claude's suggestion, or from the receipt
+   * text. Something sold by weight is priced per kg, so its size is always 1 kg.
+   */
+  const prefillFor = (l: FormLine) => {
+    const s = l.suggested_product && !l.suggested_product.existing ? l.suggested_product : null;
+    return {
+      name: s?.name ?? l.raw_text.trim(),
+      brand: s?.brand ?? null,
+      category_id: props.categories.find((c) => c.name === s?.category)?.id ?? null,
+      size_value: l.is_weighed ? 1 : (s?.size_value ?? null),
+      size_unit: l.is_weighed ? ("kg" as const) : (s?.size_unit ?? null),
+    };
+  };
+
   const addLine = () =>
     set({
       lines: [
@@ -133,11 +204,17 @@ export function ReviewForm(props: { receiptId: string; stores: { id: string; nam
           is_weighed: false,
           is_deposit: false,
           confidence: null,
+          product_id: "",
+          suggested_product: null,
+          match: null,
         },
       ],
     });
 
-  const removeLine = (key: string) => set({ lines: state.lines.filter((l) => l.key !== key) });
+  const removeLine = (key: string) => {
+    if (addingFor === key) setAddingFor(null);
+    set({ lines: state.lines.filter((l) => l.key !== key) });
+  };
 
   const submit = (confirm: boolean) => {
     if (!input) {
@@ -153,8 +230,9 @@ export function ReviewForm(props: { receiptId: string; stores: { id: string; nam
 
   const bad = (field: string) => (invalid.has(field) ? { "aria-invalid": true as const } : {});
 
+  // A div, not a form: each line can hold a form of its own for adding a product.
   return (
-    <form className={styles.form} data-testid="review-form" onSubmit={(e) => e.preventDefault()}>
+    <div className={styles.form} data-testid="review-form">
       <fieldset className={styles.header} disabled={pending}>
         <label className={styles.field}>
           <span>Store</span>
@@ -193,6 +271,8 @@ export function ReviewForm(props: { receiptId: string; stores: { id: string; nam
         {state.lines.map((l, i) => {
           const n = i + 1;
           const unsure = l.confidence !== null && l.confidence < LOW_CONFIDENCE;
+          const suggestion = l.suggested_product && !l.suggested_product.existing ? l.suggested_product : null;
+          const adding = addingFor === l.key;
           return (
             <div key={l.key} className={`${styles.line} ${unsure ? styles.unsure : ""}`} data-testid="line-row">
               <label className={`${styles.field} ${styles.wide}`}>
@@ -247,6 +327,61 @@ export function ReviewForm(props: { receiptId: string; stores: { id: string; nam
                   {...bad(`${l.key}.discount`)}
                 />
               </label>
+
+              {!l.is_deposit && (
+                <div className={styles.product} data-testid="line-product-picker">
+                  <label className={styles.field}>
+                    <span>Product</span>
+                    <select
+                      aria-label={`Product, line ${n}`}
+                      value={adding ? NEW_PRODUCT : l.product_id}
+                      onChange={(e) => {
+                        if (e.target.value === NEW_PRODUCT) {
+                          setAddingFor(l.key);
+                        } else {
+                          if (adding) setAddingFor(null);
+                          setLine(l.key, { product_id: e.target.value, match: null });
+                        }
+                      }}
+                    >
+                      <option value="">No product (not tracked)</option>
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {productLabel(p)}
+                        </option>
+                      ))}
+                      <option value={NEW_PRODUCT}>New product…</option>
+                    </select>
+                  </label>
+
+                  {l.product_id && l.match && !adding && (
+                    <p className={styles.productNote} data-testid="product-note">
+                      {MATCH_NOTES[l.match]}
+                    </p>
+                  )}
+
+                  {!l.product_id && suggestion && !adding && (
+                    <p className={styles.productNote}>
+                      Claude suggests a new product:{" "}
+                      <button type="button" className={styles.link} onClick={() => setAddingFor(l.key)}>
+                        Add {[suggestion.name, sizeOf(suggestion)].filter(Boolean).join(", ")}
+                      </button>
+                    </p>
+                  )}
+
+                  {adding && (
+                    <div className={styles.newProduct}>
+                      <ProductForm
+                        categories={props.categories}
+                        prefill={prefillFor(l)}
+                        onSaved={(p) => productAdded(l.key, p)}
+                        onCancel={() => setAddingFor(null)}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className={styles.flags}>
                 <label>
                   <input
@@ -291,6 +426,13 @@ export function ReviewForm(props: { receiptId: string; stores: { id: string; nam
               : `Lines add up to ${euro.format(lineSum)}, but the total paid is ${euro.format(total)} (difference ${euro.format(Math.abs(lineSum - total))}).`}
       </p>
 
+      {items.length > 0 && (
+        <p className={styles.matchSummary} data-testid="match-summary">
+          {matched} of {items.length} {items.length === 1 ? "item" : "items"} matched to a product.
+          {matched < items.length && " Items without a product aren't tracked."}
+        </p>
+      )}
+
       {message && (
         <p role={message.kind === "error" ? "alert" : "status"} className={message.kind === "error" ? styles.error : styles.ok}>
           {message.text}
@@ -308,6 +450,6 @@ export function ReviewForm(props: { receiptId: string; stores: { id: string; nam
       {!addsUp && state.lines.length > 0 && (
         <p className={styles.muted}>You can confirm once the lines add up to the total paid.</p>
       )}
-    </form>
+    </div>
   );
 }

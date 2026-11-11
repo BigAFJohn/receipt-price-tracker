@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { amsterdamToIso, isPlausibleDate, isValidTime, normalizeExtraction } from "./normalize";
+import {
+  amsterdamToIso,
+  isPlausibleDate,
+  isValidTime,
+  normalizeExtraction,
+  normalizeSuggestion,
+} from "./normalize";
 import type { ExtractedReceipt } from "./schema";
 
 describe("amsterdamToIso", () => {
@@ -39,6 +45,14 @@ const raw: ExtractedReceipt = {
       discount: -0.5,
       is_deposit: false,
       confidence: 1.2,
+      product: {
+        name: " Blauwe  bessen ",
+        existing: false,
+        brand: "AH",
+        size_value: 0.125,
+        size_unit: "kg",
+        category: "Fruit & vegetables",
+      },
     },
     {
       raw_text: "STATIEGELD",
@@ -50,6 +64,7 @@ const raw: ExtractedReceipt = {
       discount: 0,
       is_deposit: true,
       confidence: 0.9,
+      product: null,
     },
   ],
 };
@@ -119,5 +134,37 @@ describe("normalizeExtraction with a missing or impossible date", () => {
 
   it("keeps the date but uses midday when the time is impossible", () => {
     expect(normalizeExtraction({ ...raw, purchase_time: "25:00" }).purchased_at).toBe("2026-11-08T12:00:00+01:00");
+  });
+});
+
+describe("normalizeSuggestion", () => {
+  const product = {
+    name: "Coca-Cola Zero",
+    existing: false,
+    brand: " Coca-Cola ",
+    size_value: 1.5,
+    size_unit: "L" as const,
+    category: "Drinks",
+  };
+
+  it("keeps a tidied suggestion", () => {
+    expect(normalizeSuggestion({ is_deposit: false, product })).toEqual({ ...product, brand: "Coca-Cola" });
+    expect(normalizeExtraction(raw).lines[0].suggested_product?.name).toBe("Blauwe bessen");
+  });
+
+  it("drops the size when it makes no sense", () => {
+    expect(normalizeSuggestion({ is_deposit: false, product: { ...product, size_value: 0 } })).toMatchObject({
+      size_value: null,
+      size_unit: null,
+    });
+    expect(normalizeSuggestion({ is_deposit: false, product: { ...product, size_unit: null } })).toMatchObject({
+      size_value: null,
+    });
+  });
+
+  it("gives no product for a deposit or a blank name", () => {
+    expect(normalizeSuggestion({ is_deposit: true, product })).toBeNull();
+    expect(normalizeSuggestion({ is_deposit: false, product: { ...product, name: "  " } })).toBeNull();
+    expect(normalizeSuggestion({ is_deposit: false, product: null })).toBeNull();
   });
 });
