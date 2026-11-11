@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/session";
 
 /** Pages that need a signed-in user. */
-const PROTECTED_PREFIXES = ["/receipts", "/products"];
+const PROTECTED_PREFIXES = ["/receipts", "/products", "/spending"];
 
 function isProtected(pathname: string) {
   return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -33,5 +33,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
+  // Everything except static files and images.
   matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 };

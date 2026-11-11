@@ -1,11 +1,6 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { supabaseConfigured, testUser } from "../expected";
-
-async function signIn(page: Page, email: string, password: string) {
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Sign in" }).click();
-}
+import { signIn } from "../helpers/auth";
 
 test.describe("Sign in", () => {
   test("a signed-out visit to /receipts lands on the login page", async ({ page }) => {
@@ -19,6 +14,12 @@ test.describe("Sign in", () => {
     await page.goto("/products");
 
     await expect(page).toHaveURL(/\/login\?next=%2Fproducts$/);
+  });
+
+  test("a signed-out visit to /spending lands on the login page", async ({ page }) => {
+    await page.goto("/spending");
+
+    await expect(page).toHaveURL(/\/login\?next=%2Fspending$/);
   });
 
   test("asks for both fields", async ({ page }) => {
