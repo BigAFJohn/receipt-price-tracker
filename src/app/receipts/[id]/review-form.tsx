@@ -2,8 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { ProductForm, type Category, type SavedProduct } from "@/app/products/product-form";
-import { linesMatchTotal } from "@/lib/pricing";
-import { receiptTextKey, type MatchSource, type SuggestedProduct } from "@/lib/product-matching";
+import { lineMathMismatch, linesMatchTotal } from "@/lib/pricing";
+import {
+  claudesGuess,
+  receiptTextKey,
+  sharedProducts,
+  type MatchSource,
+  type SuggestedProduct,
+} from "@/lib/product-matching";
 import { formatSize, type StoredUnit } from "@/lib/product-size";
 import { parseAmount, sumLines, type ReceiptInput } from "@/lib/receipt-input";
 import { saveReceipt } from "../actions";
@@ -53,6 +59,21 @@ const MATCH_NOTES: Record<MatchSource, string> = {
 
 const sizeOf = (p: { size_value: number | null; size_unit: StoredUnit | null }) =>
   p.size_value && p.size_unit ? formatSize(p.size_value, p.size_unit) : null;
+
+/** "1, 2 and 4" */
+const listNumbers = (numbers: number[]) =>
+  numbers.length === 1 ? `${numbers[0]}` : `${numbers.slice(0, -1).join(", ")} and ${numbers[numbers.length - 1]}`;
+
+/** quantity × price, when it doesn't make the line total: one of them was probably misread. */
+function lineMathProblem(l: FormLine): string | null {
+  const quantity = parseAmount(l.quantity);
+  const price = parseAmount(l.unit_price);
+  const total = parseAmount(l.line_total);
+  if (quantity === null || price === null || total === null) return null;
+  const expected = lineMathMismatch(quantity, price, total);
+  if (expected === null) return null;
+  return `${l.quantity} × ${euro.format(price)} = ${euro.format(expected)}, but the line total is ${euro.format(total)}. Check the quantity and price on the photo.`;
+}
 
 /** "Coca-Cola Zero · 1,5 L" */
 const productLabel = (p: ProductOption) => [p.name, sizeOf(p)].filter(Boolean).join(" · ");
@@ -132,6 +153,10 @@ export function ReviewForm(props: {
     );
   const items = state.lines.filter((l) => !l.is_deposit);
   const matched = items.filter((l) => l.product_id).length;
+  // Different lines linked to one product: usually a slip, worth a second look.
+  const shared = [...sharedProducts(state.lines.map((l) => ({ ...l, product_id: l.product_id || null })))].map(
+    ([productId, numbers]) => ({ name: products.find((p) => p.id === productId)?.name ?? "one product", numbers }),
+  );
 
   const set = (patch: Partial<FormState>) => {
     setMessage(null);
@@ -273,6 +298,9 @@ export function ReviewForm(props: {
           const unsure = l.confidence !== null && l.confidence < LOW_CONFIDENCE;
           const suggestion = l.suggested_product && !l.suggested_product.existing ? l.suggested_product : null;
           const adding = addingFor === l.key;
+          // Claude's guess at one of your products: offered, never chosen for you.
+          const guess = !l.product_id && !adding ? claudesGuess(l.suggested_product, products) : null;
+          const mathProblem = lineMathProblem(l);
           return (
             <div key={l.key} className={`${styles.line} ${unsure ? styles.unsure : ""}`} data-testid="line-row">
               <label className={`${styles.field} ${styles.wide}`}>
@@ -328,6 +356,12 @@ export function ReviewForm(props: {
                 />
               </label>
 
+              {mathProblem && (
+                <p className={styles.lineWarning} data-testid="line-math">
+                  {mathProblem}
+                </p>
+              )}
+
               {!l.is_deposit && (
                 <div className={styles.product} data-testid="line-product-picker">
                   <label className={styles.field}>
@@ -357,6 +391,19 @@ export function ReviewForm(props: {
                   {l.product_id && l.match && !adding && (
                     <p className={styles.productNote} data-testid="product-note">
                       {MATCH_NOTES[l.match]}
+                    </p>
+                  )}
+
+                  {guess && (
+                    <p className={styles.productNote} data-testid="claudes-guess">
+                      Claude thinks this is {guess.name}.{" "}
+                      <button
+                        type="button"
+                        className={styles.link}
+                        onClick={() => setLine(l.key, { product_id: guess.id, match: null })}
+                      >
+                        Use {guess.name}
+                      </button>
                     </p>
                   )}
 
@@ -425,6 +472,13 @@ export function ReviewForm(props: {
               ? `Lines add up to ${euro.format(lineSum)}. Enter the total paid to compare.`
               : `Lines add up to ${euro.format(lineSum)}, but the total paid is ${euro.format(total)} (difference ${euro.format(Math.abs(lineSum - total))}).`}
       </p>
+
+      {shared.map((s) => (
+        <p key={s.numbers.join()} className={styles.warnBox} data-testid="shared-products">
+          Lines {listNumbers(s.numbers)} are {s.numbers.length === 2 ? "both" : "all"} linked to {s.name}, but their receipt text differs. Check each one is
+          really {s.name} before confirming.
+        </p>
+      ))}
 
       {items.length > 0 && (
         <p className={styles.matchSummary} data-testid="match-summary">

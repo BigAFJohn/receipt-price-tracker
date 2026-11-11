@@ -314,3 +314,10 @@
   color: var(--muted);
   font-size: 14px;
 }
+
+.lineWarning {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--warn);
+  font-size: 13px;
+}

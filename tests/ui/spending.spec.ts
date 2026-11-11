@@ -12,6 +12,7 @@ import { confirmReceipt, euro, signedInClient } from "../helpers/receipts";
 
 test.describe("Spending", () => {
   test.skip(!testUser, "TEST_USER_EMAIL / TEST_USER_PASSWORD not set");
+  test.describe.configure({ mode: "serial" });
 
   let supabase: SupabaseClient;
   let productId: string;

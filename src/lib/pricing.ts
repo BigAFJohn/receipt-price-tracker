@@ -46,3 +46,14 @@ export function linesMatchTotal(lines: PricedLine[], total: number): boolean {
   const tolerance = 0.01 * Math.max(1, lines.length);
   return Math.abs(sum - total) <= tolerance;
 }
+
+/**
+ * When quantity × price doesn't come to the line total, one of them was
+ * probably misread (0,48 read as 0,40). Returns quantity × price, rounded to
+ * the cent, or null when it matches. A cent either way is allowed for
+ * weighed items, whose total the till rounds.
+ */
+export function lineMathMismatch(quantity: number, unitPrice: number, lineTotal: number): number | null {
+  const expected = Math.round(quantity * unitPrice * 100) / 100;
+  return Math.abs(expected - lineTotal) > 0.011 ? expected : null;
+}
