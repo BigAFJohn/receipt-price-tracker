@@ -64,4 +64,13 @@ test.describe("Storage and data rules", () => {
      expect(error).not.toBeNull();
      await supabase.auth.signOut({ scope: "local" });
    });
+
+    test("signed out: cannot read or add products", async () => {
+    const supabase = client();
+    const { data } = await supabase.from("products").select("id");
+    const { error } = await supabase.from("products").insert({ name: "Sneaky product" });
+
+    expect(data ?? []).toHaveLength(0);
+    expect(error).not.toBeNull();
+  });
 });
