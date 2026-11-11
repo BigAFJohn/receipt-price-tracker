@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { fitWithin, receiptImagePath, validateReceiptFile } from "@/lib/receipt-image";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { createDraftReceipt } from "./actions";
@@ -31,6 +31,12 @@ export function UploadForm({ userId }: { userId: string }) {
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+
+  // Next.js keeps this page alive (hidden) while the receipt page is open, so
+  // going Back would show "Opening…" again. Reset when the page is hidden.
+  useLayoutEffect(() => {
+    return () => setStatus({ kind: "idle" });
+  }, []);
 
   async function handleFile(file: File) {
     const problem = validateReceiptFile(file);

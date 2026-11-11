@@ -45,13 +45,21 @@ test.describe("Receipts", () => {
     await expect(page.getByTestId("signed-in-as")).toBeVisible();
   });
 
-  test("uploading opens the receipt for review; deleting the draft returns to the list", async ({ page }) => {
+    test("uploading opens the receipt for review; deleting the draft returns to the list", async ({ page }) => {
     const id = await upload(page, TEST_IMAGE);
     await expect(page.getByRole("img", { name: "Receipt photo" })).toBeVisible();
 
     await waitForReading(page);
     // Whatever Claude makes of the test image, the draft can be reviewed.
     await expect(page.getByTestId("review-form")).toBeVisible();
+
+    // Going back to the list, the upload button is ready for the next receipt.
+    await page.goBack();
+    await expect(page).toHaveURL(/\/receipts$/);
+    await expect(page.getByText("Add receipt photo")).toBeVisible();
+    await expect(page.getByLabel("Receipt photo")).toBeEnabled();
+    await page.locator(`[data-receipt-id="${id}"]`).getByRole("link").click();
+    await expect(page).toHaveURL(REVIEW_URL);
 
     await deleteDraft(page, id);
   });
