@@ -6,6 +6,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ProductForm, type EditableProduct } from "../product-form";
 import styles from "../products.module.css";
 import { DeleteProductButton } from "./delete-product-button";
+import { PriceHistory } from "./price-history";
 
 export const metadata: Metadata = {
   title: "Product · Receipt Price Tracker",
@@ -51,6 +52,12 @@ async function Product({ id }: { id: string }) {
   return (
     <>
       <h1 className={styles.title}>{product.name}</h1>
+      <section className={styles.section} aria-labelledby="price-history">
+        <h2 id="price-history">Price history</h2>
+        <Suspense fallback={<p className={styles.muted}>Loading prices…</p>}>
+          <PriceHistory productId={product.id} productName={product.name} unit={product.size_unit} />
+        </Suspense>
+      </section>
       <section className={styles.section} aria-labelledby="edit-product">
         <h2 id="edit-product">Details</h2>
         <ProductForm categories={categories ?? []} product={product} />
