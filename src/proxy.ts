@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/session";
 
 /** Pages that need a signed-in user. */
-const PROTECTED_PREFIXES = ["/receipts"];
+const PROTECTED_PREFIXES = ["/receipts", "/products"];
 
 function isProtected(pathname: string) {
   return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));

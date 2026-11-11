@@ -15,6 +15,12 @@ test.describe("Sign in", () => {
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   });
 
+  test("a signed-out visit to /products lands on the login page", async ({ page }) => {
+    await page.goto("/products");
+
+    await expect(page).toHaveURL(/\/login\?next=%2Fproducts$/);
+  });
+
   test("asks for both fields", async ({ page }) => {
     await page.goto("/login");
     await page.getByRole("button", { name: "Sign in" }).click();
