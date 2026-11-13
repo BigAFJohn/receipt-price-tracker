@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { formatSize, type StoredUnit } from "./product-size";
 
 /**
  * How receipt text is compared: "  ah cola  zero " and "AH COLA ZERO" are the
@@ -77,4 +78,31 @@ export function sharedProducts(
   return new Map(
     [...byProduct].filter(([, e]) => e.texts.size > 1).map(([productId, e]) => [productId, e.numbers]),
   );
+}
+
+type Labelled = { name: string; size_value: number | null; size_unit: StoredUnit | null };
+
+/** How a product shows in the picker: "Coca-Cola Zero · 1,5 L". */
+export function productLabel(p: Labelled): string {
+  const size = p.size_value && p.size_unit ? formatSize(Number(p.size_value), p.size_unit) : null;
+  return [p.name, size].filter(Boolean).join(" · ");
+}
+
+/**
+ * The product typed or picked in a line's product field: its label as
+ * suggested ("Coca-Cola Zero · 1,5 L"), or just its name. Case and spacing
+ * don't count. A name two products share needs the label, to say which.
+ */
+export function findProduct<P extends Labelled & { id: string }>(text: string, products: P[]): P | null {
+  const key = text.trim().replace(/\s+/g, " ").toLowerCase();
+  if (!key) return null;
+  const byLabel = products.find((p) => productLabel(p).toLowerCase() === key);
+  if (byLabel) return byLabel;
+  const byName = products.filter((p) => p.name.trim().replace(/\s+/g, " ").toLowerCase() === key);
+  return byName.length === 1 ? byName[0] : null;
+}
+
+/** Products you buy most first, then by name: the order the product field suggests them in. */
+export function byPurchases<P extends { name: string; purchases: number }>(products: P[]): P[] {
+  return [...products].sort((a, b) => b.purchases - a.purchases || a.name.localeCompare(b.name));
 }

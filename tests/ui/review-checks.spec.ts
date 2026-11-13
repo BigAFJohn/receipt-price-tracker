@@ -67,16 +67,30 @@ test.describe("Review checks", () => {
     await expect(page.getByTestId("shared-products")).toContainText(`Lines 1 and 3 are both linked to ${product}`);
 
     // Claude's guess is offered, not chosen
-    await expect(page.getByLabel(linkedTo(2)).locator("option:checked")).toHaveText("No product (not tracked)");
+    await expect(page.getByLabel(linkedTo(2))).toHaveValue("");
     await expect(rows.nth(1).getByTestId("claudes-guess")).toContainText(`Claude thinks this is ${product}.`);
     await rows.nth(1).getByRole("button", { name: `Use ${product}` }).click();
-    await expect(page.getByLabel(linkedTo(2)).locator("option:checked")).toHaveText(`${product} · 1 pcs`);
+    await expect(page.getByLabel(linkedTo(2))).toHaveValue(`${product} · 1 pcs`);
     await expect(page.getByTestId("shared-products")).toContainText(`Lines 1, 2 and 3 are all linked to ${product}`);
 
     // Unlinking the wrong lines clears the warning
-    await page.getByLabel(linkedTo(2)).selectOption({ label: "No product (not tracked)" });
-    await page.getByLabel(linkedTo(3)).selectOption({ label: "No product (not tracked)" });
+    await page.getByLabel(linkedTo(2)).fill("");
+    await page.getByLabel(linkedTo(3)).fill("");
     await expect(page.getByTestId("shared-products")).toHaveCount(0);
+
+    // Typing a product's name, in any letters, links it
+    await page.getByLabel(linkedTo(2)).fill(product.toLowerCase());
+    await expect(page.getByTestId("shared-products")).toContainText(`Lines 1 and 2 are both linked to ${product}`);
+
+        // A name you don't have offers to add it, starting from what you typed
+    const newName = `Sinaasappelsap test-${crypto.randomUUID().slice(0, 8)}`;
+    await page.getByLabel(linkedTo(2)).fill(newName);
+    await expect(rows.nth(1).getByTestId("unknown-product")).toContainText(
+      `You don't have a product called “${newName}”.`,
+    );
+    await rows.nth(1).getByRole("button", { name: "Add it as a new product" }).click();
+    await expect(rows.nth(1).getByTestId("product-form").getByLabel("Name")).toHaveValue(newName);
+
   });
 
   test("keeps a fuel price to a tenth of a cent", async ({ page }) => {

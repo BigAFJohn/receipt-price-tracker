@@ -5,6 +5,8 @@ import { ProductForm, type Category, type SavedProduct } from "@/app/products/pr
 import { lineMathMismatch, linesMatchTotal } from "@/lib/pricing";
 import {
   claudesGuess,
+  findProduct,
+  productLabel,
   receiptTextKey,
   sharedProducts,
   type MatchSource,
@@ -30,6 +32,8 @@ export type FormLine = {
   confidence: number | null;
   /** "" for no product. */
   product_id: string;
+  /** What's in the line's product field: a product's label, a name being typed, or "". */
+  product_text: string;
   suggested_product: SuggestedProduct | null;
   /** How the product was chosen, shown under the picker until you change it. */
   match: MatchSource | null;
@@ -49,8 +53,6 @@ export type ProductOption = { id: string; name: string; size_value: number | nul
 /** Lines Claude was less sure about are highlighted for a closer look. */
 const LOW_CONFIDENCE = 0.8;
 
-/** The picker's "New product…" choice. */
-const NEW_PRODUCT = "new";
 
 const euro = new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" });
 
@@ -77,8 +79,6 @@ function lineMathProblem(l: FormLine): string | null {
   return `${l.quantity} × ${euro.format(price)} = ${euro.format(expected)}, but the line total is ${euro.format(total)}. Check the quantity and price on the photo.`;
 }
 
-/** "Coca-Cola Zero · 1,5 L" */
-const productLabel = (p: ProductOption) => [p.name, sizeOf(p)].filter(Boolean).join(" · ");
 
 /** Turns the typed form into the server's input, noting which fields can't be read. */
 function readForm(state: FormState, stores: { id: string; name: string }[]): { input: ReceiptInput | null; invalid: Set<string> } {
@@ -201,9 +201,19 @@ export function ReviewForm(props: {
     }));
   };
 
+  /** Typing in a line's product field links the product it names, or none while it names none. */
+  const typeProduct = (key: string, text: string) => {
+    const found = findProduct(text, products);
+    setLine(key, { product_text: text, product_id: found?.id ?? "", match: null });
+  };
+
+  /** Links a product to a line, showing its label in the field. */
+  const linkProduct = (key: string, product: ProductOption) =>
+    setLine(key, { product_id: product.id, product_text: productLabel(product), match: null });
+
   /** A product added from a line is used for that line, and for unmatched lines with the same text. */
   const productAdded = (forKey: string, product: SavedProduct) => {
-    setProducts((list) => [...list, product].sort((a, b) => a.name.localeCompare(b.name)));
+    setProducts((list) => [...list, product]);
     setAddingFor(null);
     setMessage(null);
     setState((s) => {
@@ -212,7 +222,7 @@ export function ReviewForm(props: {
         ...s,
         lines: s.lines.map((l) =>
           l.key === forKey || (!l.product_id && !l.is_deposit && receiptTextKey(l.raw_text) === text)
-            ? { ...l, product_id: product.id, match: null }
+            ? { ...l, product_id: product.id, product_text: productLabel(product), match: null }
             : l,
         ),
       };
@@ -226,7 +236,8 @@ export function ReviewForm(props: {
   const prefillFor = (l: FormLine) => {
     const s = l.suggested_product && !l.suggested_product.existing ? l.suggested_product : null;
     return {
-      name: s?.name ?? l.raw_text.trim(),
+      // A name typed in the product field comes first.
+      name: l.product_text.trim() || s?.name || l.raw_text.trim(),
       brand: s?.brand ?? null,
       category_id: props.categories.find((c) => c.name === s?.category)?.id ?? null,
       size_value: l.is_weighed ? 1 : (s?.size_value ?? null),
@@ -250,6 +261,7 @@ export function ReviewForm(props: {
           is_deposit: false,
           confidence: null,
           product_id: "",
+          product_text: "",
           suggested_product: null,
           match: null,
         },
@@ -330,7 +342,8 @@ export function ReviewForm(props: {
           const suggestion = l.suggested_product && !l.suggested_product.existing ? l.suggested_product : null;
           const adding = addingFor === l.key;
           // Claude's guess at one of your products: offered, never chosen for you.
-          const guess = !l.product_id && !adding ? claudesGuess(l.suggested_product, products) : null;
+          const guess =
+            !l.product_id && !l.product_text.trim() && !adding ? claudesGuess(l.suggested_product, products) : null;
           const mathProblem = lineMathProblem(l);
           return (
             <div key={l.key} className={`${styles.line} ${unsure ? styles.unsure : ""}`} data-testid="line-row">
@@ -395,29 +408,28 @@ export function ReviewForm(props: {
 
               {!l.is_deposit && (
                 <div className={styles.product} data-testid="line-product-picker">
+                  {/* Type to search your products (most bought first); empty = not tracked. */}
                   <label className={styles.field}>
                     <span>Product</span>
-                    <select
+                    <input
                       aria-label={`Product, line ${n}`}
-                      value={adding ? NEW_PRODUCT : l.product_id}
-                      onChange={(e) => {
-                        if (e.target.value === NEW_PRODUCT) {
-                          setAddingFor(l.key);
-                        } else {
-                          if (adding) setAddingFor(null);
-                          setLine(l.key, { product_id: e.target.value, match: null });
-                        }
-                      }}
-                    >
-                      <option value="">No product (not tracked)</option>
-                      {products.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {productLabel(p)}
-                        </option>
-                      ))}
-                      <option value={NEW_PRODUCT}>New product…</option>
-                    </select>
+                      list="product-options"
+                      value={l.product_text}
+                      onChange={(e) => typeProduct(l.key, e.target.value)}
+                      autoComplete="off"
+                      maxLength={140}
+                      placeholder="Type to find a product, or leave empty"
+                    />
                   </label>
+
+                  {!l.product_id && l.product_text.trim() && !adding && (
+                    <p className={styles.productNote} data-testid="unknown-product">
+                      You don&apos;t have a product called “{l.product_text.trim()}”.{" "}
+                      <button type="button" className={styles.link} onClick={() => setAddingFor(l.key)}>
+                        Add it as a new product
+                      </button>
+                    </p>
+                  )}
 
                   {l.product_id && l.match && !adding && (
                     <p className={styles.productNote} data-testid="product-note">
@@ -431,14 +443,14 @@ export function ReviewForm(props: {
                       <button
                         type="button"
                         className={styles.link}
-                        onClick={() => setLine(l.key, { product_id: guess.id, match: null })}
+                        onClick={() => linkProduct(l.key, guess)}
                       >
                         Use {guess.name}
                       </button>
                     </p>
                   )}
 
-                  {!l.product_id && suggestion && !adding && (
+                  {!l.product_id && !l.product_text.trim() && suggestion && !adding && (
                     <p className={styles.productNote}>
                       Claude suggests a new product:{" "}
                       <button type="button" className={styles.link} onClick={() => setAddingFor(l.key)}>
@@ -503,6 +515,13 @@ export function ReviewForm(props: {
               ? `Lines add up to ${euro.format(lineSum)}. Enter the total paid to compare.`
               : `Lines add up to ${euro.format(lineSum)}, but the total paid is ${euro.format(total)} (difference ${euro.format(Math.abs(lineSum - total))}).`}
       </p>
+
+      {/* One list of suggestions for every line's product field. */}
+      <datalist id="product-options">
+        {products.map((p) => (
+          <option key={p.id} value={productLabel(p)} />
+        ))}
+      </datalist>
 
       {shared.map((s) => (
         <p key={s.numbers.join()} className={styles.warnBox} data-testid="shared-products">

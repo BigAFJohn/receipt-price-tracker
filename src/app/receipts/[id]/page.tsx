@@ -2,7 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
-import { receiptTextKey, type MatchSource, type SuggestedProduct } from "@/lib/product-matching";
+import {
+  byPurchases,
+  productLabel,
+  receiptTextKey,
+  type MatchSource,
+  type SuggestedProduct,
+} from "@/lib/product-matching";
 import { formatPrice } from "@/lib/price-history";
 import { formatForInput, formatPriceForInput, toAmsterdamParts } from "@/lib/receipt-input";
 import { byUse, findStore } from "@/lib/stores";
@@ -94,7 +100,8 @@ async function Review({ id }: { id: string }) {
       .order("line_no"),
     // With your receipts per store, to suggest the ones you use most first.
     supabase.from("stores").select("id, name, receipts(count)"),
-    supabase.from("products").select("id, name, size_value, size_unit").order("name"),
+    // With how often each was bought, to suggest the ones you buy most first.
+    supabase.from("products").select("id, name, size_value, size_unit, receipt_lines(count)"),
     supabase.from("categories").select("id, name").order("name"),
   ]);
 
@@ -111,6 +118,15 @@ async function Review({ id }: { id: string }) {
     : { data: null };
 
   const rows = (lines ?? []) as LineRow[];
+  const productList: ProductOption[] = byPurchases(
+    (products ?? []).map((p) => ({
+      id: p.id as string,
+      name: p.name as string,
+      size_value: p.size_value === null ? null : Number(p.size_value),
+      size_unit: p.size_unit as ProductOption["size_unit"],
+      purchases: (p.receipt_lines as { count: number }[] | null)?.[0]?.count ?? 0,
+    })),
+  ).map((p) => ({ id: p.id, name: p.name, size_value: p.size_value, size_unit: p.size_unit }));
   const storeList = byUse(
     (stores ?? []).map((s) => ({
       id: s.id as string,
@@ -170,9 +186,9 @@ async function Review({ id }: { id: string }) {
               key={receipt.extracted_at ?? "unread"}
               receiptId={receipt.id}
               stores={storeList}
-              products={(products ?? []) as ProductOption[]}
+              products={productList}
               categories={categories ?? []}
-              initial={toFormState(receipt, rows, aliases, storeList)}
+              initial={toFormState(receipt, rows, aliases, storeList, productList)}
             />
 
             <div className={styles.dangerZone}>
@@ -206,7 +222,12 @@ function toFormState(
   lines: LineRow[],
   aliases: Map<string, string>,
   stores: { id: string; name: string }[],
+  products: ProductOption[],
 ): FormState {
+  const productText = (id: string | null) => {
+    const product = id ? products.find((p) => p.id === id) : null;
+    return product ? productLabel(product) : "";
+  };
   const matchSource = (l: LineRow): MatchSource | null => {
     if (!l.product_id) return null;
     if (aliases.get(receiptTextKey(l.raw_text)) === l.product_id) return "remembered";
@@ -230,6 +251,7 @@ function toFormState(
       is_deposit: l.is_deposit,
       confidence: l.confidence === null ? null : Number(l.confidence),
       product_id: l.product_id ?? "",
+      product_text: productText(l.product_id),
       suggested_product: l.suggested_product,
       match: matchSource(l),
     })),

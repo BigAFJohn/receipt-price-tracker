@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { claudesGuess, matchProduct, receiptTextKey, sharedProducts, type SuggestedProduct } from "./product-matching";
+import {
+  byPurchases,
+  claudesGuess,
+  findProduct,
+  matchProduct,
+  productLabel,
+  receiptTextKey,
+  sharedProducts,
+  type SuggestedProduct,
+} from "./product-matching";
 
 describe("receiptTextKey", () => {
   it("ignores spacing and case", () => {
@@ -89,5 +98,41 @@ describe("sharedProducts", () => {
         line("STATIEGELD", "p-croissant", true),
       ]).size,
     ).toBe(0);
+  });
+});
+
+describe("product field", () => {
+  const products = [
+    { id: "cola", name: "Coca-Cola Zero", size_value: 1.5, size_unit: "L" as const },
+    { id: "cola-can", name: "Coca-Cola Zero", size_value: 0.33, size_unit: "L" as const },
+    { id: "melk", name: "Halfvolle melk", size_value: 1, size_unit: "L" as const },
+    { id: "bananen", name: "Bananen", size_value: null, size_unit: null },
+  ];
+
+  it("labels a product with its size", () => {
+    expect(productLabel(products[0])).toBe("Coca-Cola Zero · 1,5 L");
+    expect(productLabel(products[1])).toBe("Coca-Cola Zero · 330 ml");
+    expect(productLabel(products[3])).toBe("Bananen");
+  });
+
+  it("finds a product by its label or, when only one has it, its name", () => {
+    expect(findProduct("Coca-Cola Zero · 330 ml", products)?.id).toBe("cola-can");
+    expect(findProduct("  halfvolle   MELK ", products)?.id).toBe("melk");
+    expect(findProduct("bananen", products)?.id).toBe("bananen");
+  });
+
+  it("needs the label when two products share a name, and finds nothing for a new name", () => {
+    expect(findProduct("Coca-Cola Zero", products)).toBeNull();
+    expect(findProduct("Pindakaas", products)).toBeNull();
+    expect(findProduct("  ", products)).toBeNull();
+  });
+
+  it("suggests the products you buy most first", () => {
+    const sorted = byPurchases([
+      { name: "Bananen", purchases: 1 },
+      { name: "Appels", purchases: 0 },
+      { name: "Croissant", purchases: 4 },
+    ]);
+    expect(sorted.map((p) => p.name)).toEqual(["Croissant", "Bananen", "Appels"]);
   });
 });
