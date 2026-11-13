@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatForInput,
+  formatPriceForInput,
   parseAmount,
   ReceiptInputSchema,
   sumLines,
@@ -148,5 +149,13 @@ describe("ReceiptInputSchema", () => {
 
   it("rejects a malformed date", () => {
     expect(ReceiptInputSchema.safeParse({ ...valid, date: "08-11-2026" }).success).toBe(false);
+  });
+});
+
+describe("formatPriceForInput", () => {
+  it("keeps a tenth of a cent, and shows cents otherwise", () => {
+    expect(formatPriceForInput(2.449)).toBe("2.449");
+    expect(formatPriceForInput(2.45)).toBe("2.45");
+    expect(formatPriceForInput(0.4)).toBe("0.40");
   });
 });

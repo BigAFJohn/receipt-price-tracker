@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { formatUnitPrice, priceTicks, summarize, toPricePoints, type PriceHistoryRow } from "./price-history";
+import {
+  formatPrice,
+  formatUnitPrice,
+  hasTenthsOfCents,
+  priceTicks,
+  quantityText,
+  summarize,
+  toPricePoints,
+  type PriceHistoryRow,
+} from "./price-history";
 
 const row = (r: Partial<PriceHistoryRow>): PriceHistoryRow => ({
   line_id: crypto.randomUUID(),
@@ -105,5 +114,36 @@ describe("priceTicks", () => {
   it("copes with bigger prices", () => {
     expect(priceTicks(8.5, 14.2)).toEqual([6, 8, 10, 12, 14, 16]);
     expect(priceTicks(2.29, 3.49)).toEqual([2, 2.5, 3, 3.5, 4]);
+  });
+});
+
+describe("formatPrice", () => {
+  const plain = (text: string) => text.replace(/\u00a0/g, " ");
+
+  it("keeps a tenth of a cent when the price has one, as fuel does", () => {
+    expect(hasTenthsOfCents(2.449)).toBe(true);
+    expect(plain(formatPrice(2.449))).toBe("€ 2,449");
+    expect(plain(formatUnitPrice(2.215, "L"))).toBe("€ 2,215 per L");
+  });
+
+  it("shows cents for ordinary prices and worked-out unit prices", () => {
+    expect(hasTenthsOfCents(0.48)).toBe(false);
+    expect(hasTenthsOfCents(2.45)).toBe(false);
+    expect(hasTenthsOfCents(1.1933)).toBe(false);
+    expect(plain(formatPrice(0.4))).toBe("€ 0,40");
+    expect(plain(formatUnitPrice(1.1933, "L"))).toBe("€ 1,19 per L");
+  });
+});
+
+describe("quantityText", () => {
+  it("shows litres and kilos for products sold per 1 L or 1 kg", () => {
+    expect(quantityText(36.36, { sizeValue: 1, unit: "L" })).toBe("36,36 L");
+    expect(quantityText(35, { sizeValue: 1, unit: "L" })).toBe("35 L");
+    expect(quantityText(1.463, { sizeValue: 1, unit: "kg" })).toBe("1,463 kg");
+  });
+
+  it("counts packs otherwise", () => {
+    expect(quantityText(2, { sizeValue: 1.5, unit: "L" })).toBe("2×");
+    expect(quantityText(2, { sizeValue: 1, unit: "pcs" })).toBe("2×");
   });
 });

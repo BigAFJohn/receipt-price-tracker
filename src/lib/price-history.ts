@@ -95,11 +95,34 @@ export function summarize(points: PricePoint[]): PriceSummary | null {
 }
 
 const euro = new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" });
+const euro3 = new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR", minimumFractionDigits: 3 });
 
-/** "€ 1,19 per L", "€ 0,48 per piece"; a dash when there's no unit price. */
+/** True for a price set to a tenth of a cent, as fuel is (2,449); not for one worked out (1,1933). */
+export function hasTenthsOfCents(value: number): boolean {
+  const mills = value * 1000;
+  return Math.abs(mills - Math.round(mills)) < 1e-6 && Math.round(mills) % 10 !== 0;
+}
+
+/** "€ 0,48"; a price set to a tenth of a cent keeps it: "€ 2,449". */
+export function formatPrice(value: number): string {
+  return hasTenthsOfCents(value) ? euro3.format(value) : euro.format(value);
+}
+
+/** "€ 1,19 per L", "€ 2,449 per L", "€ 0,48 per piece"; a dash when there's no unit price. */
 export function formatUnitPrice(value: number | null, unit: "L" | "kg" | "pcs"): string {
   if (value === null) return "–";
-  return `${euro.format(value)} ${unit === "pcs" ? "per piece" : `per ${unit}`}`;
+  return `${formatPrice(value)} ${unit === "pcs" ? "per piece" : `per ${unit}`}`;
+}
+
+const amount = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 3 });
+
+/**
+ * How much was bought, for a product of this size: "36,36 L" of fuel or
+ * "1,463 kg" of something weighed (a product sold per 1 L or 1 kg), "2×" for packs.
+ */
+export function quantityText(quantity: number, product: { sizeValue: number | null; unit: "L" | "kg" | "pcs" }): string {
+  if (product.sizeValue === 1 && product.unit !== "pcs") return `${amount.format(quantity)} ${product.unit}`;
+  return `${amount.format(quantity)}×`;
 }
 
 /**

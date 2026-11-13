@@ -55,7 +55,12 @@ async function Product({ id }: { id: string }) {
       <section className={styles.section} aria-labelledby="price-history">
         <h2 id="price-history">Price history</h2>
         <Suspense fallback={<p className={styles.muted}>Loading prices…</p>}>
-          <PriceHistory productId={product.id} productName={product.name} unit={product.size_unit} />
+          <PriceHistory
+            productId={product.id}
+            productName={product.name}
+            unit={product.size_unit}
+            sizeValue={product.size_value === null ? null : Number(product.size_value)}
+          />
         </Suspense>
       </section>
       <section className={styles.section} aria-labelledby="edit-product">

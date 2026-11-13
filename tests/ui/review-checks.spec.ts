@@ -78,4 +78,26 @@ test.describe("Review checks", () => {
     await page.getByLabel(linkedTo(3)).selectOption({ label: "No product (not tracked)" });
     await expect(page.getByTestId("shared-products")).toHaveCount(0);
   });
+
+  test("keeps a fuel price to a tenth of a cent", async ({ page }) => {
+    const fuel = await draftReceipt(supabase, {
+      store: "Hoogvliet",
+      at: "2026-10-09T06:26:00+02:00",
+      lines: [{ text: "95 ongelood", quantity: 36.36, unitPrice: 2.449, lineTotal: 89.05 }],
+    });
+
+    try {
+      await page.goto(`/receipts/${fuel}`);
+      await expect(page.getByLabel("Unit price, line 1")).toHaveValue("2.449");
+      // 36,36 × 2,449 makes the 89,05 printed: nothing to warn about
+      await expect(page.getByTestId("line-math")).toHaveCount(0);
+
+      await page.getByRole("button", { name: "Confirm receipt" }).click();
+      await expect(page).toHaveURL(/\/receipts$/);
+      await page.locator(`[data-receipt-id="${fuel}"]`).getByRole("link").click();
+      await expect(page.getByRole("cell", { name: euro("€ 2,449") })).toBeVisible();
+    } finally {
+      await supabase.from("receipts").delete().eq("id", fuel);
+    }
+  });
 });

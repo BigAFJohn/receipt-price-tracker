@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   effectiveUnitPrice,
+  lineMathMismatch,
   linesMatchTotal,
   shelfUnitPrice,
   type PricedLine,
@@ -67,5 +68,17 @@ describe("linesMatchTotal", () => {
 
   it("rejects a mismatch larger than the rounding tolerance", () => {
     expect(linesMatchTotal([cola, deposit], 4.5)).toBe(false);
+  });
+});
+
+describe("lineMathMismatch", () => {
+  it("is quiet when quantity × price makes the line total", () => {
+    expect(lineMathMismatch(2, 0.48, 0.96)).toBeNull();
+    expect(lineMathMismatch(1.463, 2.29, 3.35)).toBeNull(); // weighed: the till rounds to the cent
+    expect(lineMathMismatch(36.36, 2.449, 89.05)).toBeNull(); // fuel: priced to a tenth of a cent
+  });
+
+  it("gives quantity × price when it doesn't (0,48 misread as 0,40)", () => {
+    expect(lineMathMismatch(2, 0.4, 0.96)).toBe(0.8);
   });
 });

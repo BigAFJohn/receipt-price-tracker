@@ -1,4 +1,4 @@
-import { formatUnitPrice, summarize, toPricePoints, type PriceHistoryRow } from "@/lib/price-history";
+import { formatUnitPrice, quantityText, summarize, toPricePoints, type PriceHistoryRow } from "@/lib/price-history";
 import type { StoredUnit } from "@/lib/product-size";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import styles from "../products.module.css";
@@ -6,10 +6,6 @@ import { PriceChart } from "./price-chart";
 
 const date = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Amsterdam" });
 const euro = new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" });
-const weight = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 3 });
-
-/** "2×" for a count, "1,463 kg" for a weighed item. */
-const quantityText = (q: number) => (Number.isInteger(q) ? `${q}×` : `${weight.format(q)} kg`);
 const percent = new Intl.NumberFormat("en-GB", { signDisplay: "exceptZero", maximumFractionDigits: 1 });
 
 /** What you paid for a product over time, from your confirmed receipts. */
@@ -17,9 +13,12 @@ export async function PriceHistory({
   productId,
   productName,
   unit,
+  sizeValue,
 }: {
   productId: string;
   productName: string;
+  /** The product's pack size, in `unit`: 1 for fuel per litre or something weighed per kg. */
+  sizeValue: number | null;
   /** The product's size unit; null when it has no size, so there are no unit prices. */
   unit: StoredUnit | null;
 }) {
@@ -125,7 +124,9 @@ export async function PriceHistory({
                 <td>{p.store ?? "Unknown store"}</td>
                 <td className={styles.num}>
                   {euro.format(p.amount)}
-                  {p.quantity !== 1 && <span className={styles.muted}> ({quantityText(p.quantity)})</span>}
+                  {p.quantity !== 1 && (
+                    <span className={styles.muted}> ({quantityText(p.quantity, { sizeValue, unit: unit ?? "pcs" })})</span>
+                  )}
                 </td>
                 {unit && (
                   <>

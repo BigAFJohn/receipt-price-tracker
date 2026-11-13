@@ -16,6 +16,12 @@ export function formatForInput(value: number, decimals = 2): string {
   return decimals === 2 ? value.toFixed(2) : String(Math.round(value * 10 ** decimals) / 10 ** decimals);
 }
 
+/** Shows a price for editing: "2.50", and "2.449" for a price set to a tenth of a cent, as fuel is. */
+export function formatPriceForInput(value: number): string {
+  const mills = Math.round(value * 1000);
+  return Math.abs(value * 1000 - mills) < 1e-6 && mills % 10 !== 0 ? value.toFixed(3) : value.toFixed(2);
+}
+
 /** The date and time a stored timestamp shows on an Amsterdam clock: { date: "2026-11-08", time: "17:17" }. */
 export function toAmsterdamParts(iso: string): { date: string; time: string } {
   const parts = new Intl.DateTimeFormat("en-CA", {

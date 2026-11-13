@@ -66,7 +66,11 @@ function buildLineSchema(categories: string[]) {
       .number()
       .describe("Number of items, or the weight in kg for a weighed item (1,463kg → 1.463). 1 when not printed."),
     is_weighed: z.boolean().describe("True when the item is sold by weight (a kg amount and a price per kg)"),
-    unit_price: money("Price per item, or per kg for a weighed item, before any discount"),
+    unit_price: z
+      .number()
+      .describe(
+        "Price per item, or per kg or litre when sold by weight or volume, before any discount, with every decimal printed (2,58 → 2.58; fuel 2,449 → 2.449)",
+      ),
     line_total: money("Amount printed for this line, before any discount"),
     discount: money(
       "Discount applied to this item (Bonus, 1+1 gratis, korting), as a positive amount. 0 when none.",
