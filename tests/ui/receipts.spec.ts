@@ -123,14 +123,17 @@ test.describe("Receipts", () => {
     // First receipt: add a new product from line 1, leave line 2 untracked, confirm
     const first = await upload(page, SAMPLE);
     await waitForReading(page);
-    await page.getByLabel("Product, line 1").selectOption({ label: "New product…" });
+    // A name you don't have yet offers to add it as a new product
+    await page.getByLabel("Product, line 1").fill(product);
+    await onScreen("line-row").first().getByRole("button", { name: "Add it as a new product" }).click();
     const newProduct = onScreen("line-row").first().getByTestId("product-form");
     await newProduct.getByLabel("Name").fill(product);
     await newProduct.getByLabel("Size").fill("1");
     await newProduct.getByLabel("Unit").selectOption("pcs");
     await newProduct.getByRole("button", { name: "Add product" }).click();
-    await expect(page.getByLabel("Product, line 1").locator("option:checked")).toHaveText(`${product} · 1 pcs`);
-    await page.getByLabel("Product, line 2").selectOption({ label: "No product (not tracked)" });
+    await expect(page.getByLabel("Product, line 1")).toHaveValue(`${product} · 1 pcs`);
+    // Empty = not tracked
+    await page.getByLabel("Product, line 2").fill("");
     await expect(onScreen("match-summary")).toContainText("1 of 2 items matched to a product.");
     await page.getByRole("button", { name: "Confirm receipt" }).click();
     await expect(page).toHaveURL(/\/receipts$/);
@@ -145,7 +148,7 @@ test.describe("Receipts", () => {
     // Second receipt from the same store: line 1 is matched by itself
     const second = await upload(page, SAMPLE);
     await waitForReading(page);
-    await expect(page.getByLabel("Product, line 1").locator("option:checked")).toHaveText(`${product} · 1 pcs`);
+    await expect(page.getByLabel("Product, line 1")).toHaveValue(`${product} · 1 pcs`);
     await expect(onScreen("line-row").first().getByTestId("product-note")).toHaveText(
       "Remembered from an earlier receipt.",
     );
