@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { receiptTextKey, type MatchSource, type SuggestedProduct } from "@/lib/product-matching";
 import { formatForInput, toAmsterdamParts } from "@/lib/receipt-input";
+import { findStore, NEW_STORE } from "@/lib/stores";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { DeleteButton } from "../delete-button";
 import { ReadButton } from "../read-button";
@@ -77,7 +78,10 @@ async function Review({ id }: { id: string }) {
   ] = await Promise.all([
     supabase
       .from("receipts")
-      .select("id, status, image_path, store_id, purchased_at, total, extracted_at, extraction_error")
+      // store_read: the shop's name as Claude read it, for a store you don't have yet.
+      .select(
+        "id, status, image_path, store_id, purchased_at, total, extracted_at, extraction_error, store_read:extraction->>store",
+      )
       .eq("id", id)
       .maybeSingle(),
     supabase
@@ -160,7 +164,7 @@ async function Review({ id }: { id: string }) {
               stores={storeList}
               products={(products ?? []) as ProductOption[]}
               categories={categories ?? []}
-              initial={toFormState(receipt, rows, aliases)}
+              initial={toFormState(receipt, rows, aliases, storeList)}
             />
 
             <div className={styles.dangerZone}>
@@ -173,10 +177,27 @@ async function Review({ id }: { id: string }) {
   );
 }
 
+/**
+ * The store to start the form with: the one saved; else the store Claude read,
+ * if you have it; else a new store under the name Claude read.
+ */
+function initialStore(storeId: string | null, storeRead: string | null, stores: { id: string; name: string }[]) {
+  if (storeId) return { store_id: storeId, new_store_name: "" };
+  if (!storeRead?.trim()) return { store_id: "", new_store_name: "" };
+  const known = findStore(storeRead, stores);
+  return known ? { store_id: known.id, new_store_name: "" } : { store_id: NEW_STORE, new_store_name: storeRead };
+}
+
 function toFormState(
-  receipt: { store_id: string | null; purchased_at: string | null; total: number | null },
+  receipt: {
+    store_id: string | null;
+    store_read: string | null;
+    purchased_at: string | null;
+    total: number | null;
+  },
   lines: LineRow[],
   aliases: Map<string, string>,
+  stores: { id: string; name: string }[],
 ): FormState {
   const matchSource = (l: LineRow): MatchSource | null => {
     if (!l.product_id) return null;
@@ -185,7 +206,7 @@ function toFormState(
   };
   const when = receipt.purchased_at ? toAmsterdamParts(receipt.purchased_at) : { date: "", time: "" };
   return {
-    store_id: receipt.store_id ?? "",
+    ...initialStore(receipt.store_id, receipt.store_read, stores),
     date: when.date,
     time: when.time,
     total: receipt.total === null ? "" : formatForInput(Number(receipt.total)),

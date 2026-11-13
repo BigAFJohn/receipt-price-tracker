@@ -21,13 +21,20 @@ export type ExtractionResult = {
 export type TrackedProduct = { name: string; brand: string | null; size: string | null };
 
 /**
- * The text sent with the photo: the products you already track, so Claude can
- * recognise them on the receipt, even when another store prints them differently.
+ * The text sent with the photo: your stores, so Claude writes a store you have
+ * the same way each time, and the products you already track, so it can
+ * recognise them, even when another store prints them differently.
  */
-export function receiptRequestText(products: TrackedProduct[]): string {
-  if (products.length === 0) return "Read this receipt. No products are tracked yet.";
-  const list = products.map((p) => `- ${[p.name, p.brand, p.size].filter(Boolean).join(" · ")}`).join("\n");
-  return `Read this receipt.\n\nProducts already tracked (name · brand · size):\n${list}`;
+export function receiptRequestText(products: TrackedProduct[], stores: string[] = []): string {
+  const parts = ["Read this receipt."];
+  if (stores.length) parts.push(`Your stores: ${stores.join(", ")}.`);
+  if (products.length === 0) {
+    parts.push("No products are tracked yet.");
+  } else {
+    const list = products.map((p) => `- ${[p.name, p.brand, p.size].filter(Boolean).join(" · ")}`).join("\n");
+    parts.push(`Products already tracked (name · brand · size):\n${list}`);
+  }
+  return parts.join("\n\n");
 }
 
 /** The part of the SDK client we use, so tests can pass a stand-in. */
@@ -49,7 +56,7 @@ export async function extractFromImage(
 ): Promise<ExtractionResult> {
   const model = options.model ?? process.env.EXTRACTION_MODEL ?? DEFAULT_EXTRACTION_MODEL;
   const client = options.client ?? new Anthropic({ timeout: 60_000, maxRetries: 2 });
-  const schema = buildExtractionSchema(options.stores ?? KNOWN_STORES, options.categories ?? KNOWN_CATEGORIES);
+  const schema = buildExtractionSchema(options.categories ?? KNOWN_CATEGORIES);
 
   const response = await client.messages.parse({
     model,
@@ -63,7 +70,7 @@ export async function extractFromImage(
             type: "image",
             source: { type: "base64", media_type: "image/jpeg", data: Buffer.from(jpeg).toString("base64") },
           },
-          { type: "text", text: receiptRequestText(options.products ?? []) },
+          { type: "text", text: receiptRequestText(options.products ?? [], options.stores ?? KNOWN_STORES) },
         ],
       },
     ],

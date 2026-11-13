@@ -1,3 +1,4 @@
+import { storeKey } from "@/lib/stores";
 import type { NormalizedReceipt } from "./normalize";
 
 /** A golden receipt (tests/fixtures/receipts/*.json): the hand-checked answer. */
@@ -37,7 +38,8 @@ export function scoreExtraction(golden: GoldenReceipt, actual: NormalizedReceipt
   const check = (field: string, expected: unknown, actualValue: unknown, ok: boolean) =>
     checks.push({ field, expected, actual: actualValue, ok });
 
-  check("store", golden.store, actual.store, golden.store === actual.store);
+  // "Albert Heijn" and "ALBERT HEIJN B.V." are the same store.
+  check("store", golden.store, actual.store, !!actual.store && storeKey(golden.store) === storeKey(actual.store));
   check(
     "purchased_at",
     golden.purchased_at,

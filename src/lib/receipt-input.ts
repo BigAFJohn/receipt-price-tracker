@@ -52,6 +52,14 @@ export const ReceiptLineInputSchema = z.object({
 export const ReceiptInputSchema = z.object({
   // guid(): any id in Postgres's uuid format; the database checks the store exists.
   store_id: z.guid("Choose a store from the list").nullable(),
+  // A store to add (or find) when no store_id is chosen, e.g. "Jumbo" as Claude read it.
+  new_store_name: z
+    .string()
+    .trim()
+    .min(1, "Give the new store a name")
+    .max(80, "Keep the store name under 80 characters")
+    .nullable()
+    .default(null),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter the purchase date"),
   time: z.string().regex(/^\d{2}:\d{2}$/, "Enter the purchase time"),
   total: amount,

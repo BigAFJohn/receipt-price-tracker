@@ -1,5 +1,6 @@
 import { linesMatchTotal } from "@/lib/pricing";
 import type { SuggestedProduct } from "@/lib/product-matching";
+import { cleanStoreName } from "@/lib/stores";
 import type { ExtractedLine, ExtractedReceipt } from "./schema";
 
 export type NormalizedLine = {
@@ -17,7 +18,8 @@ export type NormalizedLine = {
 };
 
 export type NormalizedReceipt = {
-  store: string;
+  /** The shop's name as read, tidied; null when none is printed. */
+  store: string | null;
   store_branch: string | null;
   purchased_at: string | null; // ISO 8601 with the Amsterdam offset; null when no usable date was read
   total: number;
@@ -110,7 +112,7 @@ export function normalizeExtraction(raw: ExtractedReceipt): NormalizedReceipt {
   const total = round(raw.total, 2);
 
   return {
-    store: raw.store,
+    store: raw.store?.trim() ? cleanStoreName(raw.store) : null,
     store_branch: raw.store_branch?.trim() || null,
     purchased_at:
       raw.purchase_date && isPlausibleDate(raw.purchase_date)

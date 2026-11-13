@@ -34,7 +34,14 @@ export type SeedLine = {
   } | null;
 };
 
-type SeedReceipt = { store: string; at: string; lines: SeedLine[] };
+type SeedReceipt = {
+  /** A store you have, by name; null for none. */
+  store: string | null;
+  /** The shop's name as Claude "read" it, for a store you don't have yet. */
+  storeRead?: string;
+  at: string;
+  lines: SeedLine[];
+};
 
 const cents = (n: number) => Math.round(n * 100) / 100;
 
@@ -55,10 +62,16 @@ export function draftReceipt(supabase: SupabaseClient, receipt: SeedReceipt): Pr
 }
 
 async function seedReceipt(supabase: SupabaseClient, receipt: SeedReceipt, confirm: boolean): Promise<string> {
-  const { data: store } = await supabase.from("stores").select("id").eq("name", receipt.store).single();
+  const { data: store } = receipt.store
+    ? await supabase.from("stores").select("id").eq("name", receipt.store).single()
+    : { data: null };
   const { data: draft } = await supabase
     .from("receipts")
-    .insert({ status: "draft", extracted_at: new Date().toISOString() })
+    .insert({
+      status: "draft",
+      extracted_at: new Date().toISOString(),
+      extraction: receipt.storeRead ? { store: receipt.storeRead } : null,
+    })
     .select("id")
     .single();
 
@@ -82,7 +95,7 @@ async function seedReceipt(supabase: SupabaseClient, receipt: SeedReceipt, confi
 
   const { error } = await supabase.rpc("save_receipt", {
     p_receipt_id: draft!.id,
-    p_store_id: store!.id,
+    p_store_id: store?.id ?? null,
     p_purchased_at: receipt.at,
     p_total: cents(lines.reduce((sum, l) => sum + l.line_total - l.discount, 0)),
     p_lines: lines,
