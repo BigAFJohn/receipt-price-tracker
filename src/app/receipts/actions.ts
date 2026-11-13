@@ -7,6 +7,7 @@ import { amsterdamToIso } from "@/lib/extraction/normalize";
 import { linesMatchTotal } from "@/lib/pricing";
 import { matchProduct } from "@/lib/product-matching";
 import { formatSize, type StoredUnit } from "@/lib/product-size";
+import { cleanStoreName, findStore } from "@/lib/stores";
 import { isOwnReceiptImagePath } from "@/lib/receipt-image";
 import { ReceiptInputSchema, type ReceiptInput } from "@/lib/receipt-input";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -95,7 +96,7 @@ export async function extractReceipt(
   if (downloadError || !photo) return fail("The photo could not be loaded. Try again.");
 
   const [{ data: stores }, { data: categories }, { data: products }] = await Promise.all([
-    supabase.from("stores").select("id, name"),
+    supabase.from("stores").select("id, name").order("name"),
     supabase.from("categories").select("name").order("name"),
     supabase.from("products").select("id, name, brand, size_value, size_unit").order("name"),
   ]);
@@ -121,7 +122,9 @@ export async function extractReceipt(
   if (!result.is_receipt) return fail("This photo doesn't look like a receipt.");
 
   const r = result.receipt;
-  const storeId = stores?.find((s) => s.name === r.store)?.id ?? null;
+  // A store you have, also when the receipt prints it differently ("AH");
+  // a new one is offered on the review screen, from the name kept in `extraction`.
+  const storeId = findStore(r.store, stores ?? [])?.id ?? null;
 
   // Update the receipt first: if it was deleted while Claude was reading, stop here.
   const { data: updated, error: updateError } = await supabase
@@ -185,6 +188,37 @@ export async function extractReceipt(
   return { error: null };
 }
 
+type Supabase = NonNullable<Awaited<ReturnType<typeof createSupabaseServerClient>>>;
+
+/**
+ * The store to save on a receipt: the one chosen, or a new one by name.
+ * A name you already have (also "JUMBO" for Jumbo) is reused, never added twice.
+ */
+async function storeFor(
+  supabase: Supabase,
+  chosen: { store_id: string | null; new_store_name: string | null },
+): Promise<{ storeId: string | null; error: string | null }> {
+  if (chosen.store_id || !chosen.new_store_name) return { storeId: chosen.store_id, error: null };
+
+  const name = cleanStoreName(chosen.new_store_name);
+  const existing = async () => {
+    const { data } = await supabase.from("stores").select("id, name");
+    return findStore(name, data ?? []);
+  };
+
+  const found = await existing();
+  if (found) return { storeId: found.id, error: null };
+
+  const { data: added, error } = await supabase.from("stores").insert({ name }).select("id").single();
+  if (added) return { storeId: added.id, error: null };
+
+  // Added at the same moment by another save: use that one.
+  const now = error?.code === "23505" ? await existing() : null;
+  if (now) return { storeId: now.id, error: null };
+  console.error("[receipts] store insert failed:", error?.code, error?.message);
+  return { storeId: null, error: "The new store could not be added. Try again." };
+}
+
 /**
  * Saves the reviewed store, date, total and lines. With `confirm`, also marks
  * the receipt confirmed, which needs the lines to add up to the total; the
@@ -216,9 +250,12 @@ export async function saveReceipt(
     }
   }
 
+  const store = await storeFor(supabase, data);
+  if (store.error) return { error: store.error };
+
   const { error } = await supabase.rpc("save_receipt", {
     p_receipt_id: receiptId,
-    p_store_id: data.store_id,
+    p_store_id: store.storeId,
     p_purchased_at: amsterdamToIso(data.date, data.time),
     p_total: data.total,
     p_lines: data.lines.map((l, i) => ({ line_no: i + 1, ...l })),

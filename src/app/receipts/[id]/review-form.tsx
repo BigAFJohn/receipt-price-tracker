@@ -11,6 +11,7 @@ import {
   type SuggestedProduct,
 } from "@/lib/product-matching";
 import { formatSize, type StoredUnit } from "@/lib/product-size";
+import { NEW_STORE } from "@/lib/stores";
 import { parseAmount, sumLines, type ReceiptInput } from "@/lib/receipt-input";
 import { saveReceipt } from "../actions";
 import styles from "./review.module.css";
@@ -35,7 +36,9 @@ export type FormLine = {
 };
 
 export type FormState = {
+  /** A store's id, "" for unknown, or NEW_STORE to add the store named in new_store_name. */
   store_id: string;
+  new_store_name: string;
   date: string;
   time: string;
   total: string;
@@ -88,6 +91,8 @@ function readForm(state: FormState): { input: ReceiptInput | null; invalid: Set<
   };
 
   const total = num("total", state.total);
+  const newStore = state.store_id === NEW_STORE;
+  if (newStore && !state.new_store_name.trim()) invalid.add("new_store_name");
   if (!state.date) invalid.add("date");
   if (!state.time) invalid.add("time");
 
@@ -112,7 +117,16 @@ function readForm(state: FormState): { input: ReceiptInput | null; invalid: Set<
   });
 
   return {
-    input: invalid.size ? null : { store_id: state.store_id || null, date: state.date, time: state.time, total, lines },
+    input: invalid.size
+      ? null
+      : {
+          store_id: newStore ? null : state.store_id || null,
+          new_store_name: newStore ? state.new_store_name.trim() : null,
+          date: state.date,
+          time: state.time,
+          total,
+          lines,
+        },
     invalid,
   };
 }
@@ -259,17 +273,37 @@ export function ReviewForm(props: {
   return (
     <div className={styles.form} data-testid="review-form">
       <fieldset className={styles.header} disabled={pending}>
-        <label className={styles.field}>
-          <span>Store</span>
-          <select value={state.store_id} onChange={(e) => set({ store_id: e.target.value })}>
-            <option value="">Unknown store</option>
-            {props.stores.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className={styles.storeField}>
+          <label className={styles.field}>
+            <span>Store</span>
+            <select value={state.store_id} onChange={(e) => set({ store_id: e.target.value })}>
+              <option value="">Unknown store</option>
+              {props.stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+              <option value={NEW_STORE}>New store…</option>
+            </select>
+          </label>
+          {state.store_id === NEW_STORE && (
+            <label className={styles.field}>
+              <span>New store name</span>
+              <input
+                value={state.new_store_name}
+                onChange={(e) => set({ new_store_name: e.target.value })}
+                maxLength={80}
+                placeholder="e.g. Jumbo"
+                {...bad("new_store_name")}
+              />
+            </label>
+          )}
+          {state.store_id === NEW_STORE && (
+            <span className={styles.productNote} data-testid="new-store-note">
+              Added to your stores when you save.
+            </span>
+          )}
+        </div>
         <label className={styles.field}>
           <span>Date</span>
           <input type="date" value={state.date} onChange={(e) => set({ date: e.target.value })} {...bad("date")} />

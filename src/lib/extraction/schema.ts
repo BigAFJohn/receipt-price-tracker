@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** Stores we know about; anything else comes back as "Other". */
+/** The shared stores everyone starts with (supabase/seed.sql); the app passes your own list. */
 export const KNOWN_STORES = ["Albert Heijn", "Hoogvliet", "Kruidvat", "Action"];
 
 /** The seeded categories (supabase/seed.sql); the app passes the database's own list. */
@@ -79,12 +79,15 @@ function buildLineSchema(categories: string[]) {
 
 export const ExtractedLineSchema = buildLineSchema(KNOWN_CATEGORIES);
 
-export function buildExtractionSchema(stores: string[] = KNOWN_STORES, categories: string[] = KNOWN_CATEGORIES) {
-  const storeNames: [string, ...string[]] = ["Other", ...stores];
-
+export function buildExtractionSchema(categories: string[] = KNOWN_CATEGORIES) {
   return z.object({
     is_receipt: z.boolean().describe("False when the photo is not a shop receipt"),
-    store: z.enum(storeNames).describe("The shop chain, from the list; Other when it is not listed"),
+    store: z
+      .string()
+      .nullable()
+      .describe(
+        "The shop's everyday chain name (Albert Heijn, not AH or Albert Heijn B.V.). When it is one of the stores listed in the message, copy that name exactly. Null when no shop name is printed.",
+      ),
     store_branch: z
       .string()
       .nullable()

@@ -135,6 +135,17 @@ describe("ReceiptInputSchema", () => {
     expect(result.error?.issues[0].message).toBe("Choose a product from the list");
   });
 
+  it("takes a new store's name when no store is chosen, tidied", () => {
+    const parsed = ReceiptInputSchema.parse({ ...valid, store_id: null, new_store_name: "  Jumbo " });
+    expect(parsed.new_store_name).toBe("Jumbo");
+    expect(ReceiptInputSchema.parse(valid).new_store_name).toBeNull();
+  });
+
+  it("rejects an empty new store name, with a readable message", () => {
+    const result = ReceiptInputSchema.safeParse({ ...valid, store_id: null, new_store_name: "   " });
+    expect(result.error?.issues[0].message).toBe("Give the new store a name");
+  });
+
   it("rejects a malformed date", () => {
     expect(ReceiptInputSchema.safeParse({ ...valid, date: "08-11-2026" }).success).toBe(false);
   });

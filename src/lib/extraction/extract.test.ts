@@ -103,6 +103,12 @@ describe("receiptRequestText", () => {
   });
 
   it("says so when nothing is tracked yet", () => {
-    expect(receiptRequestText([])).toBe("Read this receipt. No products are tracked yet.");
+    expect(receiptRequestText([])).toBe("Read this receipt.\n\nNo products are tracked yet.");
+  });
+
+  it("lists your stores, so Claude writes them the same way each time", () => {
+    expect(receiptRequestText([], ["Albert Heijn", "Jumbo"])).toBe(
+      "Read this receipt.\n\nYour stores: Albert Heijn, Jumbo.\n\nNo products are tracked yet.",
+    );
   });
 });
