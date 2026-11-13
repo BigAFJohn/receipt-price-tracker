@@ -7,6 +7,8 @@ import { signOut } from "../login/actions";
 import { DeleteButton } from "./delete-button";
 import { ReadButton } from "./read-button";
 import styles from "./receipts.module.css";
+import { monthName } from "@/lib/readings";
+import { getAllowance } from "@/lib/supabase/readings";
 import { UploadForm } from "./upload-form";
 
 export const metadata: Metadata = {
@@ -119,6 +121,7 @@ async function SignedInContent() {
     ? await supabase.storage.from("receipts").createSignedUrls(paths, 60 * 60)
     : { data: [] };
   const urlFor = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));
+  const readings = await getAllowance(supabase);
 
   return (
     <>
@@ -134,6 +137,11 @@ async function SignedInContent() {
       </div>
 
       <UploadForm userId={user.id} />
+      {readings.left !== null && (
+        <p className={styles.muted} data-testid="readings-left">
+          {readings.left} of {readings.limit} receipt readings left in {monthName()}.
+        </p>
+      )}
 
       {error ? (
         <p className={styles.error}>Your receipts could not be loaded. Refresh to try again.</p>

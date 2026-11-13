@@ -25,7 +25,7 @@ export async function proxy(request: NextRequest) {
     return redirectWithCookies(login, response);
   }
 
-  if (user && pathname === "/login") {
+  if (user && (pathname === "/login" || pathname === "/signup")) {
     return redirectWithCookies(new URL("/receipts", request.url), response);
   }
 
