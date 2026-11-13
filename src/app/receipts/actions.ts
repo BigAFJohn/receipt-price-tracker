@@ -10,6 +10,8 @@ import { formatSize, type StoredUnit } from "@/lib/product-size";
 import { cleanStoreName, findStore } from "@/lib/stores";
 import { isOwnReceiptImagePath } from "@/lib/receipt-image";
 import { ReceiptInputSchema, type ReceiptInput } from "@/lib/receipt-input";
+import { limitReachedMessage } from "@/lib/readings";
+import { getAllowance } from "@/lib/supabase/readings";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type ActionResult = { error: string | null };
@@ -88,6 +90,16 @@ export async function extractReceipt(
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return fail("Receipt reading isn't set up yet (ANTHROPIC_API_KEY is missing).");
+  }
+
+  // Each reading is paid for: check this month's allowance, and count this one
+  // before calling Claude. If it can't be counted, don't read.
+  const { left, limit } = await getAllowance(supabase);
+  if (left === 0) return fail(limitReachedMessage(limit!));
+  const { error: countError } = await supabase.from("readings").insert({ receipt_id: receipt.id });
+  if (countError) {
+    console.error("[extract] reading not counted:", countError.code, countError.message);
+    return fail("Receipt reading isn't available right now. Try again later.");
   }
 
   const { data: photo, error: downloadError } = await supabase.storage
