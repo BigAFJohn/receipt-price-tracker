@@ -5,7 +5,7 @@ import { Suspense } from "react";
 import { receiptTextKey, type MatchSource, type SuggestedProduct } from "@/lib/product-matching";
 import { formatPrice } from "@/lib/price-history";
 import { formatForInput, formatPriceForInput, toAmsterdamParts } from "@/lib/receipt-input";
-import { findStore, NEW_STORE } from "@/lib/stores";
+import { byUse, findStore } from "@/lib/stores";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { DeleteButton } from "../delete-button";
 import { ReadButton } from "../read-button";
@@ -92,7 +92,8 @@ async function Review({ id }: { id: string }) {
       )
       .eq("receipt_id", id)
       .order("line_no"),
-    supabase.from("stores").select("id, name").order("name"),
+    // With your receipts per store, to suggest the ones you use most first.
+    supabase.from("stores").select("id, name, receipts(count)"),
     supabase.from("products").select("id, name, size_value, size_unit").order("name"),
     supabase.from("categories").select("id, name").order("name"),
   ]);
@@ -110,7 +111,13 @@ async function Review({ id }: { id: string }) {
     : { data: null };
 
   const rows = (lines ?? []) as LineRow[];
-  const storeList = stores ?? [];
+  const storeList = byUse(
+    (stores ?? []).map((s) => ({
+      id: s.id as string,
+      name: s.name as string,
+      receipts: (s.receipts as { count: number }[] | null)?.[0]?.count ?? 0,
+    })),
+  ).map(({ id, name }) => ({ id, name }));
   const reading = receipt.status === "draft" && !receipt.extracted_at && !receipt.extraction_error;
 
   return (
@@ -180,13 +187,13 @@ async function Review({ id }: { id: string }) {
 
 /**
  * The store to start the form with: the one saved; else the store Claude read,
- * if you have it; else a new store under the name Claude read.
+ * spelled as you have it ("AH" → "Albert Heijn"), or as read for a new store.
  */
 function initialStore(storeId: string | null, storeRead: string | null, stores: { id: string; name: string }[]) {
-  if (storeId) return { store_id: storeId, new_store_name: "" };
-  if (!storeRead?.trim()) return { store_id: "", new_store_name: "" };
-  const known = findStore(storeRead, stores);
-  return known ? { store_id: known.id, new_store_name: "" } : { store_id: NEW_STORE, new_store_name: storeRead };
+  const saved = storeId ? stores.find((s) => s.id === storeId) : null;
+  if (saved) return { store_name: saved.name };
+  if (!storeRead?.trim()) return { store_name: "" };
+  return { store_name: findStore(storeRead, stores)?.name ?? storeRead };
 }
 
 function toFormState(

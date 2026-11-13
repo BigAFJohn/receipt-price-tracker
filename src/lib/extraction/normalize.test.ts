@@ -76,6 +76,12 @@ describe("normalizeExtraction", () => {
     expect(result.lines[0].discount).toBe(0.5);
   });
 
+  it("keeps the town out of the store name", () => {
+    expect(normalizeExtraction({ ...raw, store: "Ibrahim Nieuwegein", store_branch: "Vleescentrum Nieuwegein" }).store).toBe(
+      "Ibrahim",
+    );
+  });
+
   it("tidies text and empty article numbers", () => {
     expect(result.lines[0].raw_text).toBe("BLAUWE BES");
     expect(result.lines[0].sku).toBeNull();

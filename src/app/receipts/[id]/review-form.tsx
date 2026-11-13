@@ -11,7 +11,7 @@ import {
   type SuggestedProduct,
 } from "@/lib/product-matching";
 import { formatSize, type StoredUnit } from "@/lib/product-size";
-import { NEW_STORE } from "@/lib/stores";
+import { findStore } from "@/lib/stores";
 import { parseAmount, sumLines, type ReceiptInput } from "@/lib/receipt-input";
 import { saveReceipt } from "../actions";
 import styles from "./review.module.css";
@@ -36,9 +36,8 @@ export type FormLine = {
 };
 
 export type FormState = {
-  /** A store's id, "" for unknown, or NEW_STORE to add the store named in new_store_name. */
-  store_id: string;
-  new_store_name: string;
+  /** The store as typed: one you have (any spelling) or a new one; "" for unknown. */
+  store_name: string;
   date: string;
   time: string;
   total: string;
@@ -82,7 +81,7 @@ function lineMathProblem(l: FormLine): string | null {
 const productLabel = (p: ProductOption) => [p.name, sizeOf(p)].filter(Boolean).join(" · ");
 
 /** Turns the typed form into the server's input, noting which fields can't be read. */
-function readForm(state: FormState): { input: ReceiptInput | null; invalid: Set<string> } {
+function readForm(state: FormState, stores: { id: string; name: string }[]): { input: ReceiptInput | null; invalid: Set<string> } {
   const invalid = new Set<string>();
   const num = (field: string, text: string) => {
     const value = parseAmount(text);
@@ -91,8 +90,8 @@ function readForm(state: FormState): { input: ReceiptInput | null; invalid: Set<
   };
 
   const total = num("total", state.total);
-  const newStore = state.store_id === NEW_STORE;
-  if (newStore && !state.new_store_name.trim()) invalid.add("new_store_name");
+  const storeName = state.store_name.trim();
+  const known = findStore(storeName, stores);
   if (!state.date) invalid.add("date");
   if (!state.time) invalid.add("time");
 
@@ -120,8 +119,9 @@ function readForm(state: FormState): { input: ReceiptInput | null; invalid: Set<
     input: invalid.size
       ? null
       : {
-          store_id: newStore ? null : state.store_id || null,
-          new_store_name: newStore ? state.new_store_name.trim() : null,
+          // A store you have goes by its id; any other name is added on save.
+          store_id: known?.id ?? null,
+          new_store_name: known || !storeName ? null : storeName,
           date: state.date,
           time: state.time,
           total,
@@ -147,7 +147,7 @@ export function ReviewForm(props: {
   const [message, setMessage] = useState<Message>(null);
   const [pending, startTransition] = useTransition();
 
-  const { input, invalid } = readForm(state);
+  const { input, invalid } = readForm(state, props.stores);
   const lineSum = sumLines(
     state.lines.map((l) => ({ line_total: parseAmount(l.line_total) ?? 0, discount: parseAmount(l.discount) ?? 0 })),
   );
@@ -165,6 +165,12 @@ export function ReviewForm(props: {
       })),
       input.total,
     );
+  // A name that isn't one of your stores is added when you save.
+  const typedStore = state.store_name.trim();
+  const storeNote =
+    typedStore && !findStore(typedStore, props.stores)
+      ? `New store: “${typedStore}” is added to your stores when you save.`
+      : null;
   const items = state.lines.filter((l) => !l.is_deposit);
   const matched = items.filter((l) => l.product_id).length;
   // Different lines linked to one product: usually a slip, worth a second look.
@@ -273,37 +279,23 @@ export function ReviewForm(props: {
   return (
     <div className={styles.form} data-testid="review-form">
       <fieldset className={styles.header} disabled={pending}>
-        <div className={styles.storeField}>
-          <label className={styles.field}>
-            <span>Store</span>
-            <select value={state.store_id} onChange={(e) => set({ store_id: e.target.value })}>
-              <option value="">Unknown store</option>
-              {props.stores.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-              <option value={NEW_STORE}>New store…</option>
-            </select>
-          </label>
-          {state.store_id === NEW_STORE && (
-            <label className={styles.field}>
-              <span>New store name</span>
-              <input
-                value={state.new_store_name}
-                onChange={(e) => set({ new_store_name: e.target.value })}
-                maxLength={80}
-                placeholder="e.g. Jumbo"
-                {...bad("new_store_name")}
-              />
-            </label>
-          )}
-          {state.store_id === NEW_STORE && (
-            <span className={styles.productNote} data-testid="new-store-note">
-              Added to your stores when you save.
-            </span>
-          )}
-        </div>
+        {/* Type to search your stores (most used first), or type a new one. */}
+        <label className={styles.field}>
+          <span>Store</span>
+          <input
+            list="store-options"
+            value={state.store_name}
+            onChange={(e) => set({ store_name: e.target.value })}
+            maxLength={80}
+            autoComplete="off"
+            placeholder="e.g. Albert Heijn"
+          />
+        </label>
+        <datalist id="store-options">
+          {props.stores.map((s) => (
+            <option key={s.id} value={s.name} />
+          ))}
+        </datalist>
         <label className={styles.field}>
           <span>Date</span>
           <input type="date" value={state.date} onChange={(e) => set({ date: e.target.value })} {...bad("date")} />
@@ -321,6 +313,11 @@ export function ReviewForm(props: {
             {...bad("total")}
           />
         </label>
+        {storeNote && (
+          <p className={styles.storeNote} data-testid="new-store-note">
+            {storeNote}
+          </p>
+        )}
       </fieldset>
 
       <fieldset className={styles.lines} disabled={pending}>

@@ -3,9 +3,6 @@
  * "ALBERT HEIJN B.V." and "Albert Heijn" don't become three stores.
  */
 
-/** The review form's "New store…" choice in the store picker. */
-export const NEW_STORE = "new";
-
 /** Company-form words a receipt may print after the shop's name. */
 const COMPANY_FORMS = /\b(b\.?\s?v\.?|n\.?\s?v\.?|v\.?\s?o\.?\s?f\.?|ltd\.?|inc\.?|gmbh)$/i;
 
@@ -46,4 +43,22 @@ export function cleanStoreName(name: string): string {
     .trim()
     .replace(/[.,]+$/, "")
     .slice(0, 80);
+}
+
+/**
+ * A store name without the town or branch Claude sometimes adds, when that
+ * town also appears in the branch it read: "Ibrahim Nieuwegein" with branch
+ * "Vleescentrum Nieuwegein" → "Ibrahim". The first word always stays.
+ */
+export function withoutBranch(store: string, branch: string | null): string {
+  if (!branch?.trim()) return store;
+  const branchWords = new Set(branch.toLowerCase().split(/[\s,]+/).filter(Boolean));
+  const words = store.split(" ");
+  while (words.length > 1 && branchWords.has(words[words.length - 1].toLowerCase())) words.pop();
+  return words.join(" ");
+}
+
+/** Stores you shop at most first, then by name: the order the store field suggests them in. */
+export function byUse<S extends { name: string; receipts: number }>(stores: S[]): S[] {
+  return [...stores].sort((a, b) => b.receipts - a.receipts || a.name.localeCompare(b.name));
 }

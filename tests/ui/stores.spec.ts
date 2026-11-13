@@ -34,15 +34,16 @@ test.describe("Stores", () => {
 
     await page.goto(`/receipts/${id}`);
     await signIn(page, testUser!.email, testUser!.password);
-    await expect(page.getByLabel("Store").locator("option:checked")).toHaveText("New store…");
-    await expect(page.getByLabel("New store name")).toHaveValue(store);
-    await expect(page.getByTestId("new-store-note")).toHaveText("Added to your stores when you save.");
+    await expect(page.getByLabel("Store")).toHaveValue(store);
+    await expect(page.getByTestId("new-store-note")).toHaveText(
+      `New store: “${store}” is added to your stores when you save.`,
+    );
 
     await page.getByRole("button", { name: "Confirm receipt" }).click();
     await expect(page).toHaveURL(/\/receipts$/);
     await expect(page.locator(`[data-receipt-id="${id}"]`)).toContainText(store);
 
-    // Now one of your stores: the next receipt from it starts with it chosen
+    // Now one of your stores: the next receipt from it uses it, spelled your way
     const next = await draftReceipt(supabase, {
       store: null,
       storeRead: store.toUpperCase(),
@@ -51,8 +52,8 @@ test.describe("Stores", () => {
     });
     receiptIds.push(next);
     await page.goto(`/receipts/${next}`);
-    await expect(page.getByLabel("Store").locator("option:checked")).toHaveText(store);
-    await expect(page.getByLabel("New store name")).toHaveCount(0);
+    await expect(page.getByLabel("Store")).toHaveValue(store);
+    await expect(page.getByTestId("new-store-note")).toHaveCount(0);
   });
 
   test("recognises a store you have when the receipt prints it differently", async ({ page }) => {
@@ -66,21 +67,31 @@ test.describe("Stores", () => {
 
     await page.goto(`/receipts/${id}`);
     await signIn(page, testUser!.email, testUser!.password);
-    await expect(page.getByLabel("Store").locator("option:checked")).toHaveText("Albert Heijn");
+    await expect(page.getByLabel("Store")).toHaveValue("Albert Heijn");
+    await expect(page.getByTestId("new-store-note")).toHaveCount(0);
   });
 
-  test("asks for a name when adding a new store by hand", async ({ page }) => {
+  test("suggests your stores while typing, and takes a new one by name", async ({ page }) => {
     const id = await draftReceipt(supabase, { store: "Hoogvliet", at: "2026-11-12T10:00:00+01:00", lines: [line] });
     receiptIds.push(id);
 
     await page.goto(`/receipts/${id}`);
     await signIn(page, testUser!.email, testUser!.password);
-    await page.getByLabel("Store").selectOption({ label: "New store…" });
-    await expect(page.getByLabel("New store name")).toHaveValue("");
+    const field = page.getByLabel("Store");
+    await expect(field).toHaveValue("Hoogvliet");
+    // The field offers your stores as suggestions
+    await expect(page.locator("#store-options option[value='Albert Heijn']")).toHaveCount(1);
+
+    // Typed in other letters, a store you have is still that store
+    await field.fill("hoogvliet");
+    await expect(page.getByTestId("new-store-note")).toHaveCount(0);
+
+    // A name you don't have becomes a new store when saved
+    await field.fill(store);
+    await expect(page.getByTestId("new-store-note")).toContainText(`New store: “${store}”`);
     await page.getByRole("button", { name: "Save draft" }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "highlighted" })).toHaveText(
-      "Fix the highlighted fields first.",
-    );
-    await expect(page.getByLabel("New store name")).toHaveAttribute("aria-invalid", "true");
+    await expect(page.getByRole("status").filter({ hasText: "Draft saved." })).toBeVisible();
+    const { data } = await supabase.from("stores").select("name").eq("name", store);
+    expect(data).toHaveLength(1);
   });
 });
