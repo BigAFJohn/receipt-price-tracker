@@ -3,7 +3,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { receiptTextKey, type MatchSource, type SuggestedProduct } from "@/lib/product-matching";
-import { formatForInput, toAmsterdamParts } from "@/lib/receipt-input";
+import { formatPrice } from "@/lib/price-history";
+import { formatForInput, formatPriceForInput, toAmsterdamParts } from "@/lib/receipt-input";
 import { findStore, NEW_STORE } from "@/lib/stores";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { DeleteButton } from "../delete-button";
@@ -215,7 +216,7 @@ function toFormState(
       raw_text: l.raw_text,
       sku: l.sku,
       quantity: formatForInput(Number(l.quantity), 3),
-      unit_price: formatForInput(Number(l.unit_price)),
+      unit_price: formatPriceForInput(Number(l.unit_price)),
       line_total: formatForInput(Number(l.line_total)),
       discount: formatForInput(Number(l.discount)),
       is_weighed: l.is_weighed,
@@ -270,7 +271,7 @@ function ConfirmedReceipt(props: {
               </td>
               <td className={styles.num}>{l.is_weighed ? `${Number(l.quantity)} kg` : Number(l.quantity)}</td>
               <td className={styles.num}>
-                {euro.format(Number(l.unit_price))}
+                {formatPrice(Number(l.unit_price))}
                 {l.is_weighed && "/kg"}
               </td>
               <td className={styles.num}>

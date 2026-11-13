@@ -101,7 +101,8 @@ export function normalizeExtraction(raw: ExtractedReceipt): NormalizedReceipt {
     sku: l.sku?.trim() || null,
     quantity: round(l.quantity, 3),
     is_weighed: l.is_weighed,
-    unit_price: round(l.unit_price, 2),
+    // Fuel is priced to a tenth of a cent (2,449 per litre); amounts paid stay in cents.
+    unit_price: round(l.unit_price, 3),
     line_total: round(l.line_total, 2),
     discount: round(Math.abs(l.discount), 2),
     is_deposit: l.is_deposit,
