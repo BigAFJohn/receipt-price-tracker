@@ -74,7 +74,7 @@ test.describe("Receipts", () => {
 
     // What Claude read
     await expect(page.getByTestId("line-row")).toHaveCount(2);
-    await expect(page.getByLabel("Store").locator("option:checked")).toHaveText("Hoogvliet");
+    await expect(page.getByLabel("Store")).toHaveValue("Hoogvliet");
     await expect(page.getByLabel("Total paid (€)")).toHaveValue("2.87");
     await expect(page.getByTestId("totals-check")).toContainText("Lines add up to the total");
 

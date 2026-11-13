@@ -1,6 +1,6 @@
 import { linesMatchTotal } from "@/lib/pricing";
 import type { SuggestedProduct } from "@/lib/product-matching";
-import { cleanStoreName } from "@/lib/stores";
+import { cleanStoreName, withoutBranch } from "@/lib/stores";
 import type { ExtractedLine, ExtractedReceipt } from "./schema";
 
 export type NormalizedLine = {
@@ -113,7 +113,8 @@ export function normalizeExtraction(raw: ExtractedReceipt): NormalizedReceipt {
   const total = round(raw.total, 2);
 
   return {
-    store: raw.store?.trim() ? cleanStoreName(raw.store) : null,
+    // "Ibrahim Nieuwegein" → "Ibrahim": the town belongs in store_branch.
+    store: raw.store?.trim() ? withoutBranch(cleanStoreName(raw.store), raw.store_branch) : null,
     store_branch: raw.store_branch?.trim() || null,
     purchased_at:
       raw.purchase_date && isPlausibleDate(raw.purchase_date)

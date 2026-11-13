@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanStoreName, findStore, storeKey } from "./stores";
+import { byUse, cleanStoreName, findStore, storeKey, withoutBranch } from "./stores";
 
 const stores = [
   { id: "ah", name: "Albert Heijn" },
@@ -43,5 +43,33 @@ describe("cleanStoreName", () => {
     expect(cleanStoreName("  Lidl   Nederland  GmbH ")).toBe("Lidl Nederland");
     expect(cleanStoreName("PLUS.")).toBe("PLUS");
     expect(cleanStoreName("x".repeat(100))).toHaveLength(80);
+  });
+});
+
+describe("withoutBranch", () => {
+  it("drops the town Claude added when it's in the branch it read", () => {
+    expect(withoutBranch("Ibrahim Nieuwegein", "Vleescentrum Nieuwegein")).toBe("Ibrahim");
+    expect(withoutBranch("Jumbo Utrecht Overvecht", "Overvecht, Utrecht")).toBe("Jumbo");
+  });
+
+  it("keeps the name when there's no branch, or the branch is something else", () => {
+    expect(withoutBranch("Albert Heijn", null)).toBe("Albert Heijn");
+    expect(withoutBranch("Albert Heijn", "Lunetten, Utrecht")).toBe("Albert Heijn");
+  });
+
+  it("always keeps the first word", () => {
+    expect(withoutBranch("Utrecht", "Utrecht")).toBe("Utrecht");
+  });
+});
+
+describe("byUse", () => {
+  it("puts the stores you shop at most first, then sorts by name", () => {
+    const sorted = byUse([
+      { name: "Action", receipts: 1 },
+      { name: "Kruidvat", receipts: 0 },
+      { name: "Hoogvliet", receipts: 7 },
+      { name: "Albert Heijn", receipts: 0 },
+    ]);
+    expect(sorted.map((s) => s.name)).toEqual(["Hoogvliet", "Action", "Albert Heijn", "Kruidvat"]);
   });
 });
